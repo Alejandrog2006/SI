@@ -21,10 +21,9 @@ def authenticate_user(uid, cripted_token):
 
     return parts[1] == generate_token(uid)
 
-@app.route('/file', methods=['GET'])
-async def list_docs():
-    data = await request.get_json()
-    uid = data.get('uid')
+@app.route('/file/<uid>', methods=['GET'])
+async def list_docs(uid):
+
     token = request.headers.get('Authorization',"") # Si pasa la autentificacion los documentos son suyos
 
     if uid is None:
@@ -40,13 +39,16 @@ async def list_docs():
         return jsonify({"error": "User not found"}), 404
 
 
-@app.route('/file', methods=['PUT'])
-async def modify_docs():
+@app.route('/file/<uid>/<filename>', methods=['PUT'])
+async def modify_docs(uid,filename):
+
     data = await request.get_json()
-    uid = data.get('uid')
-    filename = data.get('filename')
+    content = data.get("content") if data else None
+
+    if content is None:
+      return jsonify({"error": "Content is required"}), 400
+
     token = request.headers.get('Authorization',"")
-    addNew = 0
 
     if uid is None or filename is None:
         return jsonify({"error": "Missing uid or filename"}), 400
@@ -58,20 +60,22 @@ async def modify_docs():
         user_data = user_docs[uid]
         for i in range(len(user_data['documents'])):
             if user_data['documents'][i]['filename'] == filename:
-                user_data['documents'][i]['filename'] = filename
+                user_data['documents'][i]['content'] = content
                 return jsonify({"message": "Document modified successfully"}), 200
-        user_data['documents'].append({'filename': filename, 'public': False})
+        user_data['documents'].append({'filename': filename, 'content': content, 'public': False})
         return jsonify({"message": "Document modified successfully"}), 200
     else:
-        user_docs[uid] = {'uid': uid, 'documents': [{'filename': filename, 'public': False}]}
+        user_docs[uid] = {'uid': uid, 'documents': [{'filename': filename,'content': content, 'public': False}]}
         return jsonify({"message": "Document modified successfully"}), 200
 
-@app.route('/file', methods=['GET'])
-async def restore_docs():
-    data = await request.get_json()
-    uid = data.get('uid')
-    filename = data.get('filename')
+@app.route('/file/<uid>/<filename>', methods=['GET'])
+async def restore_docs(uid,filename):
+
     token = request.headers.get('Authorization',"")
+    if authenticate_user(uid, token) == False:
+        authentification = False
+    else:
+        authentification = True
 
     if uid is None or filename is None:
         return jsonify({"error": "Missing uid or filename"}), 400
@@ -79,17 +83,17 @@ async def restore_docs():
     if uid in user_docs:
         user_data = user_docs[uid]
         for doc in user_data['documents']:
-            if doc['filename'] == filename and (doc['public'] or authenticate_user(uid, token)):
+            if doc['filename'] == filename and (doc['public'] == False) and  authentification == False:
+                return jsonify({"error": "Access denied"}), 401
+            elif doc['filename'] == filename:
                 return jsonify({"document": doc}), 200
         return jsonify({"error": "Document not found"}), 404
     else:
         return jsonify({"error": "User not found"}), 404
 
-@app.route('/file', methods=['DELETE'])
-async def delete_docs():
-    data = await request.get_json()
-    uid = data.get('uid')
-    filename = data.get('filename')
+@app.route('/file/<uid>/<filename>', methods=['DELETE'])
+async def delete_docs(uid,filename):
+
     token = request.headers.get('Authorization',"")
 
     if not authenticate_user(uid, token):
@@ -108,16 +112,14 @@ async def delete_docs():
     else:
         return jsonify({"error": "User not found"}), 404
 
-@app.route('/file', methods=['PATCH'])
-async def visibility_docs():
+@app.route('/file/<uid>/<filename>', methods=['PATCH'])
+async def visibility_docs(uid,filename):
     data = await request.get_json()
-    uid = data.get('uid')
-    filename = data.get('filename')
-    public = data.get('public')
-    token = request.headers.get('Authorization',"")
+    public = data.get("public")
+    if public not in (False, True):
+        return jsonify({"error": "public must be True or False"}), 400
 
-    if uid is None or filename is None or public is None:
-        return jsonify({"error": "Missing uid, filename or public"}), 400
+    token = request.headers.get('Authorization',"")
 
     if not authenticate_user(uid, token):
         return jsonify({"error": "Unauthorized"}), 401
