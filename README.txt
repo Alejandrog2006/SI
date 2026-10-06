@@ -15,8 +15,8 @@ Los datos se mantienen en memoria. Al reiniciar los servicios se eliminan los us
 
 ```text
 cliente/
-  cliente.py          Cliente de ejemplo no interactivo
-  comprobadores.py    Comprobaciones automáticas de las rutas
+  cliente.py          Cliente no interactivo y punto de entrada de las pruebas
+  comprobadores.py    Implementación de las comprobaciones automáticas
 user_service/
   user.py             Servicio de usuarios
   Dockerfile
@@ -112,18 +112,12 @@ python user_service/user.py
 python file_service/file.py
 ```
 
-## Cliente y comprobaciones
+## Cliente de pruebas
 
-Con los dos servicios iniciados, ejecutar el cliente de ejemplo:
+Con los dos servicios iniciados, ejecutar el cliente no interactivo solicitado en el enunciado:
 
 ```bash
 python cliente/cliente.py
 ```
 
-Ejecutar las comprobaciones automáticas:
-
-```bash
-python cliente/comprobadores.py
-```
-
-El comprobador crea usuarios con nombres únicos, recorre todas las operaciones y termina con código `1` si alguna comprobación falla.
+El cliente crea usuarios con nombres únicos, recorre todas las rutas y sus principales casos de error, indica si cada resultado es el esperado y termina con código `1` si alguna comprobación falla.
