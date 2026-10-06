@@ -73,43 +73,44 @@ Los documentos se crean como privados. Solamente el propietario puede administra
 
 ## Ejecución con Docker
 
-Construir y arrancar los servicios:
+Desde la carpeta `p1`, construir y arrancar los servicios:
 
 ```bash
-docker-compose build
-docker-compose up -d
-docker-compose ps
+docker compose build
+docker compose up -d
+docker compose ps
 ```
 
 Consultar los registros:
 
 ```bash
-docker-compose logs
+docker compose logs
 ```
 
 Detenerlos:
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ## Ejecución local
 
-Crear y activar un entorno virtual e instalar las dependencias:
+Desde la carpeta `p1`, crear y activar un entorno virtual e instalar las dependencias:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r user_service/requirements.txt
 pip install -r file_service/requirements.txt
+pip install -r cliente/requirements.txt
 export SECRET_UUID=12345678-1234-5678-1234-567812345678
 ```
 
 Iniciar cada servicio en una terminal distinta:
 
 ```bash
-python user_service/user.py
-python file_service/file.py
+python3 user_service/user.py
+python3 file_service/file.py
 ```
 
 ## Cliente de pruebas
@@ -117,7 +118,7 @@ python file_service/file.py
 Con los dos servicios iniciados, ejecutar el cliente no interactivo solicitado en el enunciado:
 
 ```bash
-python cliente/cliente.py
+python3 cliente/cliente.py
 ```
 
 El cliente crea usuarios con nombres únicos, recorre todas las rutas y sus principales casos de error, indica si cada resultado es el esperado y termina con código `1` si alguna comprobación falla.
