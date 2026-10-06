@@ -79,6 +79,20 @@ def comprobar_create_user(name, password):
     )
     comprobar("Rechazar creación sin password", response, 400)
 
+    response = enviar(
+        "PUT",
+        f"{USER_URL}/user",
+        json={"password": password},
+    )
+    comprobar("Rechazar creación sin nombre", response, 400)
+
+    response = enviar(
+        "PUT",
+        f"{USER_URL}/user",
+        json={"name": name, "password": 1234},
+    )
+    comprobar("Rechazar password que no sea texto", response, 400)
+
     if not valid_data:
         return None, None
 
@@ -113,6 +127,16 @@ def comprobar_login(name, password, uid, token):
     )
     comprobar("Rechazar login sin password", response, 400)
 
+    response = enviar(
+        "POST",
+        f"{USER_URL}/user",
+        json={"password": password},
+    )
+    comprobar("Rechazar login sin nombre", response, 400)
+
+    response = enviar("POST", f"{USER_URL}/user", json=[])
+    comprobar("Rechazar login con JSON que no sea un objeto", response, 400)
+
 
 def comprobar_modify_user(name, old_password, new_password, token):
     response = enviar(
@@ -129,6 +153,22 @@ def comprobar_modify_user(name, old_password, new_password, token):
         json={"password": new_password},
     )
     comprobar("Rechazar token inválido al cambiar password", response, 401)
+
+    response = enviar(
+        "PATCH",
+        f"{USER_URL}/user",
+        headers=authorization(token),
+        json={},
+    )
+    comprobar("Rechazar cambio sin password", response, 400)
+
+    response = enviar(
+        "PATCH",
+        f"{USER_URL}/user",
+        headers=authorization(token),
+        json=[],
+    )
+    comprobar("Rechazar cambio con JSON que no sea un objeto", response, 400)
 
     response = enviar(
         "PATCH",
@@ -166,6 +206,30 @@ def comprobar_create_or_update_document(uid, token, filename):
     response = enviar(
         "PUT",
         url,
+        headers=authorization("token-invalido"),
+        json={"content": "Contenido inicial"},
+    )
+    comprobar("Rechazar creación con token inválido", response, 401)
+
+    response = enviar(
+        "PUT",
+        url,
+        headers=authorization(token),
+        json={},
+    )
+    comprobar("Rechazar documento sin contenido", response, 400)
+
+    response = enviar(
+        "PUT",
+        url,
+        headers=authorization(token),
+        json={"content": 1234},
+    )
+    comprobar("Rechazar contenido que no sea texto", response, 400)
+
+    response = enviar(
+        "PUT",
+        url,
         headers=authorization(token),
         json={"content": "Contenido inicial"},
     )
@@ -192,21 +256,26 @@ def comprobar_list_documents(uid, owner_token, other_token, filename):
     response = enviar("GET", url, headers=authorization(owner_token))
     data = response_json(response)
     documents = data.get("documents", []) if isinstance(data, dict) else []
-    contains_filename = any(
+    contains_document = any(
         document.get("filename") == filename
+        and document.get("content") == "Contenido actualizado"
+        and document.get("public") is False
         for document in documents
         if isinstance(document, dict)
     )
-    comprobar("Listar documentos propios", response, 200, contains_filename)
+    comprobar("Listar documentos propios", response, 200, contains_document)
 
 
-def comprobar_get_document(uid, token, filename):
+def comprobar_get_document(uid, owner_token, other_token, filename):
     url = f"{FILE_URL}/file/{uid}/{filename}"
 
     response = enviar("GET", url)
     comprobar("Rechazar acceso anónimo a documento privado", response, 401)
 
-    response = enviar("GET", url, headers=authorization(token))
+    response = enviar("GET", url, headers=authorization(other_token))
+    comprobar("Rechazar acceso de otro usuario a documento privado", response, 401)
+
+    response = enviar("GET", url, headers=authorization(owner_token))
     data = response_json(response)
     document = data.get("document") if isinstance(data, dict) else None
     correct_content = (
@@ -216,16 +285,24 @@ def comprobar_get_document(uid, token, filename):
     comprobar("Obtener documento privado", response, 200, correct_content)
 
 
-def comprobar_visibility(uid, token, filename):
+def comprobar_visibility(uid, owner_token, other_token, filename):
     url = f"{FILE_URL}/file/{uid}/{filename}"
 
     response = enviar(
         "PATCH",
         url,
-        headers=authorization(token),
+        headers=authorization(owner_token),
         json={},
     )
     comprobar("Rechazar cambio sin campo public", response, 400)
+
+    response = enviar(
+        "PATCH",
+        url,
+        headers=authorization(owner_token),
+        json=[],
+    )
+    comprobar("Rechazar visibilidad con JSON que no sea un objeto", response, 400)
 
     response = enviar(
         "PATCH",
@@ -237,13 +314,58 @@ def comprobar_visibility(uid, token, filename):
     response = enviar(
         "PATCH",
         url,
-        headers=authorization(token),
+        headers=authorization(owner_token),
+        json={"public": "true"},
+    )
+    comprobar("Rechazar visibilidad que no sea booleana", response, 400)
+
+    response = enviar(
+        "PATCH",
+        url,
+        headers=authorization(owner_token),
+        json={"public": 0},
+    )
+    comprobar("Rechazar cero como visibilidad", response, 400)
+
+    response = enviar(
+        "PATCH",
+        url,
+        headers=authorization(other_token),
+        json={"public": True},
+    )
+    comprobar("Rechazar cambio de visibilidad por otro usuario", response, 401)
+
+    response = enviar(
+        "PATCH",
+        url,
+        headers=authorization(owner_token),
         json={"public": True},
     )
     comprobar("Hacer público el documento", response, 200)
 
     response = enviar("GET", url)
-    comprobar("Obtener documento público sin token", response, 200)
+    data = response_json(response)
+    document = data.get("document") if isinstance(data, dict) else None
+    public_document = (
+        isinstance(document, dict)
+        and document.get("content") == "Contenido actualizado"
+        and document.get("public") is True
+    )
+    comprobar("Obtener documento público sin token", response, 200, public_document)
+
+    response = enviar(
+        "PATCH",
+        url,
+        headers=authorization(owner_token),
+        json={"public": False},
+    )
+    comprobar("Volver a hacer privado el documento", response, 200)
+
+    response = enviar("GET", url)
+    comprobar("Volver a impedir el acceso anónimo", response, 401)
+
+    response = enviar("GET", url, headers=authorization(owner_token))
+    comprobar("Mantener acceso del propietario", response, 200)
 
 
 def comprobar_delete_document(uid, owner_token, other_token, filename):
@@ -258,6 +380,18 @@ def comprobar_delete_document(uid, owner_token, other_token, filename):
     response = enviar("GET", url)
     comprobar("Documento eliminado no encontrado", response, 404)
 
+    response = enviar("DELETE", url, headers=authorization(owner_token))
+    comprobar("Rechazar borrado de documento inexistente", response, 404)
+
+    response = enviar(
+        "GET",
+        f"{FILE_URL}/file/{uid}",
+        headers=authorization(owner_token),
+    )
+    data = response_json(response)
+    documents = data.get("documents") if isinstance(data, dict) else None
+    comprobar("Listado vacío después del borrado", response, 200, documents == [])
+
 
 def main():
     suffix = uuid.uuid4().hex[:8]
@@ -268,7 +402,7 @@ def main():
     alice_uid, alice_token = comprobar_create_user(alice_name, alice_password)
     if alice_uid is None:
         print("No se puede continuar sin crear el usuario principal.")
-        return
+        return 1
 
     comprobar_login(alice_name, alice_password, alice_uid, alice_token)
     comprobar_modify_user(
@@ -281,19 +415,20 @@ def main():
     _, bob_token = comprobar_create_user(bob_name, "bob_password")
     if bob_token is None:
         print("No se pueden comprobar permisos de terceros sin crear a Bob.")
-        return
+        return 1
 
     filename = "notas.txt"
     comprobar_create_or_update_document(alice_uid, alice_token, filename)
     comprobar_list_documents(alice_uid, alice_token, bob_token, filename)
-    comprobar_get_document(alice_uid, alice_token, filename)
-    comprobar_visibility(alice_uid, alice_token, filename)
+    comprobar_get_document(alice_uid, alice_token, bob_token, filename)
+    comprobar_visibility(alice_uid, alice_token, bob_token, filename)
     comprobar_delete_document(alice_uid, alice_token, bob_token, filename)
 
     print()
     print(f"Pruebas correctas: {correctas}")
     print(f"Pruebas fallidas: {fallidas}")
+    return 1 if fallidas else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

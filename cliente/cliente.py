@@ -1,3 +1,5 @@
+import uuid
+
 import requests
 
 USER_URL = "http://localhost:5050"
@@ -169,3 +171,30 @@ def visibility_docs(uid, filename, token, public):
               print("Unexpected response")
               print(response.status_code)
        return response
+
+if __name__ == "__main__":
+    # El nombre único permite ejecutar el cliente varias veces sin recibir un 409.
+    name = f"alice_{uuid.uuid4().hex[:8]}"
+    response = create_user(name, "1234")
+
+    if response.status_code == 201:
+        data = response.json()
+        uid = data["uid"]
+        token = data["token"]
+
+        login(name, "1234")
+        modify_user("5678", token)
+
+        modify_docs(uid, "notas.txt", "Contenido inicial", token)
+        list_docs(uid, token)
+
+        # Es privado: necesita token
+        restore_docs(uid, "notas.txt", token)
+
+        # Cambiar a público
+        visibility_docs(uid, "notas.txt", token, True)
+
+        # Ya puede obtenerse sin token
+        restore_docs(uid, "notas.txt")
+
+        delete_docs(uid, "notas.txt", token)

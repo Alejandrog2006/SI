@@ -6,8 +6,7 @@ app = Quart(__name__)
 
 user_docs = {}  # Diccionario para almacenar los documentos de los usuarios [uid, documents[], public]
 
-# secret_uuid = uuid.uuid4() # Este se habrá generado una única vez y guardado en el servidor
-SECRET_UUID = uuid.UUID("12345678-1234-5678-1234-567812345678")
+SECRET_UUID = uuid.UUID(os.environ["SECRET_UUID"])
 
 def generate_token(user_uid):
     return str(uuid.uuid5(SECRET_UUID, user_uid))
@@ -43,9 +42,12 @@ async def list_docs(uid):
 async def modify_docs(uid,filename):
 
     data = await request.get_json()
-    content = data.get("content") if data else None
+    if not isinstance(data, dict):
+      return jsonify({"error": "JSON object required"}), 400
 
-    if content is None:
+    content = data.get("content")
+
+    if not isinstance(content, str):
       return jsonify({"error": "Content is required"}), 400
 
     token = request.headers.get('Authorization',"")
@@ -115,8 +117,11 @@ async def delete_docs(uid,filename):
 @app.route('/file/<uid>/<filename>', methods=['PATCH'])
 async def visibility_docs(uid,filename):
     data = await request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"error": "JSON object required"}), 400
+
     public = data.get("public")
-    if public not in (False, True):
+    if not isinstance(public, bool):
         return jsonify({"error": "public must be True or False"}), 400
 
     token = request.headers.get('Authorization',"")

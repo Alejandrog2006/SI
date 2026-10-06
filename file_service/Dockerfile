@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY file_service/file.py .
+COPY file.py .
 
 EXPOSE 5051
 

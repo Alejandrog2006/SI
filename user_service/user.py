@@ -1,4 +1,5 @@
 import hashlib
+import os
 import uuid
 from quart import Quart, request, jsonify
 
@@ -12,16 +13,18 @@ def generate_password(password):
 def generate_token(user_uid):
     return str(uuid.uuid5(SECRET_UUID, user_uid))
 
-# secret_uuid = uuid.uuid4() # Este se habrá generado una única vez y guardado en el servidor
-SECRET_UUID = uuid.UUID("12345678-1234-5678-1234-567812345678")
+SECRET_UUID = uuid.UUID(os.environ["SECRET_UUID"])
 
 @app.route('/user', methods=['PUT'])
 
 async def create_user():
     data = await request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({'error': 'JSON object required'}), 400
+
     name = data.get('name')
     password = data.get('password')
-    if not name or not password:
+    if not isinstance(name, str) or not name or not isinstance(password, str) or not password:
         return jsonify({'error': 'Name and password are required'}), 400
 
     if name in user_data:
@@ -41,9 +44,12 @@ async def create_user():
 
 async def login():
     data = await request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({'error': 'JSON object required'}), 400
+
     name = data.get('name')
     password = data.get('password')
-    if not name or not password:
+    if not isinstance(name, str) or not name or not isinstance(password, str) or not password:
         return jsonify({'error': 'Name and password are required'}), 400
 
     if not name in user_data or user_data[name]['password_hash'] != generate_password(password):
@@ -74,8 +80,11 @@ async def modify_user():
         return jsonify({'error': 'Invalid token'}), 401
 
     data = await request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({'error': 'JSON object required'}), 400
+
     password = data.get('password')
-    if not password:
+    if not isinstance(password, str) or not password:
         return jsonify({'error': 'Password is required'}), 400
 
     authenticated_user['password_hash'] = generate_password(password)
