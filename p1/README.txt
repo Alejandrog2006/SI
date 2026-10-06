@@ -1,6 +1,6 @@
 # Práctica 1: servicios de usuarios y documentos
 
-Autores: Manuel Salvador Mayor (`tassburr-pixel`) y Alejandro (`Alejandrog2006`).
+Autores: Manuel Salvador Mayor (`tassburr-pixel`) y Alejandro González García (`Alejandrog2006`).
 
 ## Descripción
 
