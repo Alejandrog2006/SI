@@ -1,59 +1,79 @@
+BEGIN;
+
+-- Contraseñas de prueba: ana1234, bruno1234 y admin1234 (SHA-256).
 INSERT INTO users (username, password_hash, country, money, role)
 VALUES
-	('ana', '$2b$12$abcdefghijklmnopqrstuu7i7h5Q2Qv1v6v8hP8Q6QqQqQqQqQq', 'España', 120.00, 'user'),
-	('bruno', '$2b$12$abcdefghijklmnopqrstuu7i7h5Q2Qv1v6v8hP8Q6QqQqQqQqQq', 'Francia', 80.00, 'user'),
-	('admin', '$2b$12$abcdefghijklmnopqrstuu7i7h5Q2Qv1v6v8hP8Q6QqQqQqQqQq', 'España', 0.00, 'admin');
+    ('ana', 'c1ea922bc882d3586346a63d47660230731014e9fc52e3641aee8ec0123c20e4', 'España', 120.00, 'user'),
+    ('bruno', '80fdc972f9021d45e7c95c08272a841f80dca992253c39ee600e3dfea952ae80', 'Francia', 80.00, 'user'),
+    ('admin', 'ac9689e2272427085e35b9d3e3e8bed88cb3434828b43b86fc0596cad4c6e270', 'España', 0.00, 'admin');
 
 INSERT INTO directors (name, ciudad)
 VALUES
-	('Christopher Nolan', 'Londres'),
-	('Greta Gerwig', 'Sacramento'),
-	('Pedro Almodóvar', 'Calzada de Calatrava');
+    ('Christopher Nolan', 'Londres'),
+    ('Greta Gerwig', 'Sacramento'),
+    ('Pedro Almodóvar', 'Calzada de Calatrava');
 
 INSERT INTO actors (name, ciudad)
 VALUES
-	('Leonardo DiCaprio', 'Los Ángeles'),
-	('Margot Robbie', 'Dalby'),
-	('Cillian Murphy', 'Douglas'),
-	('Ryan Gosling', 'London'),
-	('Penélope Cruz', 'Alcobendas');
+    ('Leonardo DiCaprio', 'Los Ángeles'),
+    ('Margot Robbie', 'Dalby'),
+    ('Cillian Murphy', 'Douglas'),
+    ('Ryan Gosling', 'Londres'),
+    ('Penélope Cruz', 'Alcobendas');
 
 INSERT INTO films (title, release_year, price, stock, director_id)
 VALUES
-	('Origen', 2010, 12.99, 8, (SELECT director_id FROM directors WHERE name = 'Christopher Nolan')),
-	('Barbie', 2023, 10.99, 10, (SELECT director_id FROM directors WHERE name = 'Greta Gerwig')),
-	('Oppenheimer', 2023, 14.99, 6, (SELECT director_id FROM directors WHERE name = 'Christopher Nolan')),
-	('Volver', 2006, 8.99, 5, (SELECT director_id FROM directors WHERE name = 'Pedro Almodóvar'));
+    ('Origen', 2010, 12.99, 8, (SELECT director_id FROM directors WHERE name = 'Christopher Nolan')),
+    ('Barbie', 2023, 10.99, 10, (SELECT director_id FROM directors WHERE name = 'Greta Gerwig')),
+    ('Oppenheimer', 2023, 14.99, 6, (SELECT director_id FROM directors WHERE name = 'Christopher Nolan')),
+    ('Volver', 2006, 8.99, 5, (SELECT director_id FROM directors WHERE name = 'Pedro Almodóvar'));
 
-INSERT INTO film_actors (film_id, actor_id)
+INSERT INTO film_actors (film_id, actor_id, character_name)
 VALUES
-	((SELECT film_id FROM films WHERE title = 'Origen'), (SELECT actor_id FROM actors WHERE name = 'Leonardo DiCaprio')),
-	((SELECT film_id FROM films WHERE title = 'Origen'), (SELECT actor_id FROM actors WHERE name = 'Cillian Murphy')),
-	((SELECT film_id FROM films WHERE title = 'Barbie'), (SELECT actor_id FROM actors WHERE name = 'Margot Robbie')),
-	((SELECT film_id FROM films WHERE title = 'Barbie'), (SELECT actor_id FROM actors WHERE name = 'Ryan Gosling')),
-	((SELECT film_id FROM films WHERE title = 'Oppenheimer'), (SELECT actor_id FROM actors WHERE name = 'Cillian Murphy')),
-	((SELECT film_id FROM films WHERE title = 'Volver'), (SELECT actor_id FROM actors WHERE name = 'Penélope Cruz'));
+    ((SELECT film_id FROM films WHERE title = 'Origen'), (SELECT actor_id FROM actors WHERE name = 'Leonardo DiCaprio'), 'Cobb'),
+    ((SELECT film_id FROM films WHERE title = 'Origen'), (SELECT actor_id FROM actors WHERE name = 'Cillian Murphy'), 'Robert Fischer'),
+    ((SELECT film_id FROM films WHERE title = 'Barbie'), (SELECT actor_id FROM actors WHERE name = 'Margot Robbie'), 'Barbie'),
+    ((SELECT film_id FROM films WHERE title = 'Barbie'), (SELECT actor_id FROM actors WHERE name = 'Ryan Gosling'), 'Ken'),
+    ((SELECT film_id FROM films WHERE title = 'Oppenheimer'), (SELECT actor_id FROM actors WHERE name = 'Cillian Murphy'), 'J. Robert Oppenheimer'),
+    ((SELECT film_id FROM films WHERE title = 'Volver'), (SELECT actor_id FROM actors WHERE name = 'Penélope Cruz'), 'Raimunda');
 
 INSERT INTO ratings (user_id, film_id, rating)
 VALUES
-	((SELECT user_id FROM users WHERE username = 'ana'), (SELECT film_id FROM films WHERE title = 'Origen'), 9),
-	((SELECT user_id FROM users WHERE username = 'bruno'), (SELECT film_id FROM films WHERE title = 'Origen'), 8),
-	((SELECT user_id FROM users WHERE username = 'ana'), (SELECT film_id FROM films WHERE title = 'Barbie'), 7),
-	((SELECT user_id FROM users WHERE username = 'bruno'), (SELECT film_id FROM films WHERE title = 'Oppenheimer'), 10);
+    ((SELECT user_id FROM users WHERE username = 'ana'), (SELECT film_id FROM films WHERE title = 'Origen'), 9),
+    ((SELECT user_id FROM users WHERE username = 'bruno'), (SELECT film_id FROM films WHERE title = 'Origen'), 8),
+    ((SELECT user_id FROM users WHERE username = 'ana'), (SELECT film_id FROM films WHERE title = 'Barbie'), 7),
+    ((SELECT user_id FROM users WHERE username = 'bruno'), (SELECT film_id FROM films WHERE title = 'Oppenheimer'), 10);
 
--- Pruebas de funcionamiento de los triggers y funciones
-
+-- Crea un carrito abierto para Ana y una venta pagada para Bruno.
 DO $$
 DECLARE
-	ana_cart_id INT;
-	bruno_cart_id INT;
+    ana_cart_id INT;
+    bruno_cart_id INT;
 BEGIN
-	ana_cart_id := get_or_create_open_cart((SELECT user_id FROM users WHERE username = 'ana'));
-	PERFORM add_film_to_cart(ana_cart_id, (SELECT film_id FROM films WHERE title = 'Origen'), 1);
-	PERFORM add_film_to_cart(ana_cart_id, (SELECT film_id FROM films WHERE title = 'Barbie'), 2);
+    ana_cart_id := get_or_create_open_cart(
+        (SELECT user_id FROM users WHERE username = 'ana')
+    );
+    PERFORM add_film_to_cart(
+        ana_cart_id,
+        (SELECT film_id FROM films WHERE title = 'Origen'),
+        1
+    );
+    PERFORM add_film_to_cart(
+        ana_cart_id,
+        (SELECT film_id FROM films WHERE title = 'Barbie'),
+        2
+    );
 
-	bruno_cart_id := get_or_create_open_cart((SELECT user_id FROM users WHERE username = 'bruno'));
-	PERFORM add_film_to_cart(bruno_cart_id, (SELECT film_id FROM films WHERE title = 'Oppenheimer'), 1);
-	PERFORM pay_open_cart(bruno_cart_id);
+    bruno_cart_id := get_or_create_open_cart(
+        (SELECT user_id FROM users WHERE username = 'bruno')
+    );
+    PERFORM add_film_to_cart(
+        bruno_cart_id,
+        (SELECT film_id FROM films WHERE title = 'Oppenheimer'),
+        1
+    );
+    PERFORM pay_open_cart(bruno_cart_id);
 END;
 $$;
+
+COMMIT;
