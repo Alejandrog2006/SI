@@ -1,5 +1,9 @@
+-- Crea toda la estructura de PostgreSQL dentro de una unica transaccion.
+-- Si cualquier sentencia falla, PostgreSQL evita dejar un esquema incompleto.
 BEGIN;
 
+-- Cuentas de la plataforma. session_version permite invalidar tokens antiguos
+-- sin almacenar los propios tokens y active permite un borrado logico.
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
@@ -16,18 +20,21 @@ CREATE TABLE users (
     CONSTRAINT users_session_version_non_negative CHECK (session_version >= 0)
 );
 
+-- Catalogo de directores referenciados por las peliculas.
 CREATE TABLE directors (
     director_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     ciudad VARCHAR(100)
 );
 
+-- Catalogo de actores que se relacionan con peliculas mediante film_actors.
 CREATE TABLE actors (
     actor_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     ciudad VARCHAR(100)
 );
 
+-- Peliculas disponibles, su precio actual, existencias y director.
 CREATE TABLE films (
     film_id SERIAL PRIMARY KEY,
     title VARCHAR(100) NOT NULL,
@@ -49,6 +56,7 @@ CREATE TABLE films (
     CONSTRAINT films_stock_non_negative CHECK (stock >= 0)
 );
 
+-- Pedidos de los usuarios. Un carrito pasa de open a paid o cancelled.
 CREATE TABLE carts (
     cart_id SERIAL PRIMARY KEY,
     user_id INT NOT NULL,
@@ -69,10 +77,12 @@ CREATE TABLE carts (
     )
 );
 
+-- Garantiza en la propia base de datos que cada usuario solo tenga un carrito abierto.
 CREATE UNIQUE INDEX one_open_cart_per_user
     ON carts (user_id)
     WHERE status = 'open';
 
+-- Votos de 0 a 10. La restriccion UNIQUE permite un unico voto por usuario y pelicula.
 CREATE TABLE ratings (
     rating_id SERIAL PRIMARY KEY,
     user_id INT NOT NULL,
@@ -92,6 +102,7 @@ CREATE TABLE ratings (
     CONSTRAINT ratings_value_valid CHECK (rating BETWEEN 0 AND 10)
 );
 
+-- Lineas del carrito. unit_price conserva el precio que tenia la pelicula al añadirla.
 CREATE TABLE cart_films (
     cart_id INT NOT NULL,
     film_id INT NOT NULL,
@@ -111,6 +122,7 @@ CREATE TABLE cart_films (
     CONSTRAINT cart_films_price_non_negative CHECK (unit_price >= 0)
 );
 
+-- Relacion muchos a muchos entre peliculas y actores, incluido el personaje interpretado.
 CREATE TABLE film_actors (
     film_id INT NOT NULL,
     actor_id INT NOT NULL,
@@ -204,6 +216,7 @@ END;
 $$;
 
 CREATE TRIGGER manage_stock_before_cart_film_change
+-- BEFORE permite rechazar la operacion o ajustar NEW.unit_price antes de guardar la fila.
 BEFORE INSERT OR UPDATE OR DELETE ON cart_films
 FOR EACH ROW
 EXECUTE FUNCTION manage_cart_film_stock();
@@ -238,6 +251,7 @@ END;
 $$;
 
 CREATE TRIGGER recalculate_total_after_cart_film_change
+-- AFTER calcula el total usando ya el contenido definitivo de cart_films.
 AFTER INSERT OR UPDATE OR DELETE ON cart_films
 FOR EACH ROW
 EXECUTE FUNCTION recalculate_cart_total();
@@ -348,6 +362,7 @@ BEGIN
 END;
 $$;
 
+-- Quita completamente una pelicula del carrito; el trigger devuelve su stock.
 CREATE OR REPLACE FUNCTION remove_film_from_cart(
     selected_cart_id INT,
     selected_film_id INT
@@ -389,6 +404,7 @@ BEGIN
 END;
 $$;
 
+-- Vacia y cancela un carrito abierto. Al borrar sus lineas se devuelve el stock.
 CREATE OR REPLACE FUNCTION cancel_open_cart(selected_cart_id INT)
 RETURNS VOID
 LANGUAGE plpgsql
@@ -411,6 +427,7 @@ BEGIN
 END;
 $$;
 
+-- Calcula la media de votos; devuelve 0 cuando la pelicula aun no tiene votos.
 CREATE OR REPLACE FUNCTION average_film_rating(selected_film_id INT)
 RETURNS DECIMAL(4, 2)
 LANGUAGE sql
@@ -421,6 +438,7 @@ AS $$
     WHERE film_id = selected_film_id;
 $$;
 
+-- Informe requerido por /ventas/<año>/<pais>. Devuelve una fila por pelicula vendida.
 CREATE OR REPLACE FUNCTION sales_by_year_country(
     selected_year INT,
     selected_country VARCHAR
@@ -461,4 +479,5 @@ AS $$
     ORDER BY c.paid_at, c.cart_id, f.film_id;
 $$;
 
+-- Hace permanentes conjuntamente las tablas, restricciones, funciones y triggers.
 COMMIT;

@@ -1,54 +1,69 @@
-import sys
+"""Cliente de ejemplo para consumir los dos servicios HTTP de la practica."""
 
 import requests
 
+
+# Direcciones publicadas por Docker en el ordenador anfitrion.
 USER_URL = "http://localhost:5050"
-FILE_URL = "http://localhost:5051"
+API_URL = "http://localhost:5051"
+
 
 def authorization_header(token):
-       return {
-          "Authorization": f"Bearer {token}"
-      }
-def create_user(name, password):
+    """Construye la cabecera exigida por todos los endpoints autenticados."""
+    return {"Authorization": f"Bearer {token}"}
+
+
+def create_user(username, password, country):
+    """Solicita al servicio de usuarios la creacion de una cuenta."""
+    # requests convierte el diccionario de json a JSON y añade Content-Type.
     response = requests.put(
-          f"{USER_URL}/user",
-          json={
-              "name": name,
-              "password": password
-          }
-      )
+        f"{USER_URL}/user",
+        json={
+            "username": username,
+            "password": password,
+            "country": country,
+        },
+    )
+
+    # El codigo HTTP permite distinguir el resultado sin inspeccionar el texto.
     if response.status_code == 400:
         print("Datos incompletos")
     elif response.status_code == 409:
-            print("Usuario duplicado")
+        print("Usuario duplicado")
     elif response.status_code == 201:
-            print("Usuario Creado correctamente: ")
-            print(response.json())
+        print("Usuario creado correctamente:")
+        print(response.json())
     else:
-           print("Respuesta inesperada")
-           print(response.status_code)
+        print("Respuesta inesperada")
+        print(response.status_code)
+
+    # Se devuelve Response para que otras comprobaciones puedan inspeccionarla.
     return response
 
-def login(name, password):
+
+def login(username, password):
+    """Inicia sesion y devuelve la respuesta que contiene el token Bearer."""
     response = requests.post(
-            f"{USER_URL}/user/login",
-            json={
-                "name" : name,
-                "password" : password
-            }
+        f"{USER_URL}/user/login",
+        json={
+            "username": username,
+            "password": password,
+        },
     )
 
     if response.status_code == 400:
-            print("No name or password given")
+        print("Falta el usuario o la contraseña")
     elif response.status_code == 401:
-            print("Invalid credentials")
+        print("Credenciales invalidas")
     elif response.status_code == 200:
-            print("Succesfull login")
-            print(response.json())
+        print("Inicio de sesion correcto")
+        print(response.json())
     else:
-           print("Respuesta inesperada")
-           print(response.status_code)
+        print("Respuesta inesperada")
+        print(response.status_code)
+
     return response
 
-if __name__ == "__main__":
-    sys.exit(comprobar_servicios())
+
+# Las funciones del servicio API (peliculas, carrito, votos y ventas) se añadiran
+# a este archivo a medida que se implementen sus endpoints en api_service/api.py.
