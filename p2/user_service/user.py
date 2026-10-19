@@ -1,12 +1,15 @@
-"""Servicio HTTP encargado de usuarios, sesiones y recargas de saldo."""
+"""Servicio HTTP encargado de usuarios, sesiones y recargas de saldo.
+
+Autores: Manuel Salvador Mayor y Alejandro González García
+"""
 
 import base64
 import binascii
 import hashlib
-import hmac
 import os
 from decimal import Decimal, InvalidOperation
 
+from cryptography.fernet import Fernet, InvalidToken
 from quart import Quart, jsonify, request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -16,10 +19,13 @@ from sqlalchemy.orm import sessionmaker
 # Quart usa este objeto para registrar y atender las rutas del servicio.
 app = Quart(__name__)
 
-# Docker proporciona la direccion de PostgreSQL y el secreto usado para firmar tokens.
+# Docker proporciona PostgreSQL y el secreto usado para cifrar los tokens.
 # El mismo TOKEN_SECRET debe estar configurado en user_service y api_service.
 DATABASE_URL = os.environ["DATABASE_URL"]
 TOKEN_SECRET = os.environ["TOKEN_SECRET"].encode()
+TOKEN_CIPHER = Fernet(
+    base64.urlsafe_b64encode(hashlib.sha256(TOKEN_SECRET).digest())
+)
 
 # El motor mantiene las conexiones asincronas con PostgreSQL. sessionmaker crea
 # una sesion nueva para cada peticion y permite ejecutar SQL mediante await.
@@ -37,50 +43,26 @@ def generate_password(password):
 
 
 def generate_token(user_id, session_version):
-    """Crea un token firmado que identifica al usuario y a su sesion actual."""
-    # Estos son los datos que la API podra recuperar posteriormente del token.
-    payload = f"{user_id}:{session_version}"
-
-    # HMAC combina los datos con el secreto. Sin TOKEN_SECRET no se puede generar
-    # una firma valida después de modificar el usuario o la version de sesion.
-    signature = hmac.new(
-        TOKEN_SECRET,
-        payload.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-
-    # El contenido final tiene el formato user_id:session_version:firma.
-    token_data = f"{payload}:{signature}".encode()
-
-    # Base64 permite enviar el token como texto dentro de una cabecera HTTP.
-    return base64.urlsafe_b64encode(token_data).decode()
+    """Crea un token cifrado que identifica al usuario y a su sesión actual."""
+    # Fernet cifra el contenido y autentica cualquier modificación del token.
+    return TOKEN_CIPHER.encrypt(
+        f"{user_id}:{session_version}".encode()
+    ).decode()
 
 
 def decode_token(token):
-    """Valida la firma y devuelve (user_id, session_version), o None si falla."""
+    """Descifra y valida el token, o devuelve None si su contenido no es válido."""
     if not token:
         return None
 
     try:
-        # Recupera y separa las tres partes que introdujo generate_token().
-        token_data = base64.urlsafe_b64decode(token.encode()).decode()
-        user_id, session_version, signature = token_data.split(":")
-        payload = f"{user_id}:{session_version}"
-
-        # Calcula de nuevo la firma esperada sin confiar en la enviada por el cliente.
-        expected_signature = hmac.new(
-            TOKEN_SECRET,
-            payload.encode(),
-            hashlib.sha256,
-        ).hexdigest()
-
-        if not hmac.compare_digest(signature, expected_signature):
-            return None
-
+        user_id, session_version = TOKEN_CIPHER.decrypt(
+            token.encode()
+        ).decode().split(":")
         return int(user_id), int(session_version)
 
     # Cualquier problema de formato convierte el token en invalido.
-    except (ValueError, UnicodeDecodeError, binascii.Error):
+    except (InvalidToken, ValueError, UnicodeDecodeError, binascii.Error):
         return None
 
 

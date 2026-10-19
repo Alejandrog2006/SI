@@ -33,8 +33,8 @@ services:
     environment:
       # Dentro de Compose se usa database:5432, no localhost:9999.
       DATABASE_URL: postgresql+asyncpg://alumnodb:1234@database:5432/si1
-      # Ambos servicios deben compartir el secreto para validar las mismas firmas.
-      TOKEN_SECRET: ${TOKEN_SECRET:-p2-development-secret}
+      # Ambos servicios deben compartir el secreto definido fuera del repositorio.
+      TOKEN_SECRET: ${TOKEN_SECRET:?Define TOKEN_SECRET in .env}
     ports:
       - "5050:5050"
     depends_on:
@@ -50,7 +50,7 @@ services:
     container_name: si_p2_api
     environment:
       DATABASE_URL: postgresql+asyncpg://alumnodb:1234@database:5432/si1
-      TOKEN_SECRET: ${TOKEN_SECRET:-p2-development-secret}
+      TOKEN_SECRET: ${TOKEN_SECRET:?Define TOKEN_SECRET in .env}
     ports:
       - "5051:5051"
     depends_on:

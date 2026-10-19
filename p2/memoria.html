@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Práctica 2 - Videoclub</title>
+  <style>
+    @page { size: A4; margin: 2cm 1.8cm; }
+    body { font-family: Arial, sans-serif; color: #222; line-height: 1.42; }
+    h1, h2, h3 { color: #17365d; page-break-after: avoid; }
+    h1 { font-size: 26pt; text-align: center; margin-top: 7cm; }
+    h2 { font-size: 18pt; border-bottom: 1px solid #5b9bd5; padding-bottom: 4px; margin-top: 26px; }
+    h3 { font-size: 13pt; margin-top: 20px; }
+    .cover { page-break-after: always; text-align: center; }
+    .subtitle { text-align: center; font-size: 15pt; color: #555; }
+    .meta { margin: 3cm auto; width: 75%; border-collapse: collapse; }
+    .meta td { border: 1px solid #aaa; padding: 9px; }
+    .meta td:first-child { font-weight: bold; background: #eaf2f8; width: 35%; }
+    .page-break { page-break-before: always; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 9.5pt; }
+    th { background: #d9eaf7; text-align: left; }
+    th, td { border: 1px solid #999; padding: 6px; vertical-align: top; }
+    code, pre { font-family: "DejaVu Sans Mono", monospace; }
+    pre { background: #f4f6f7; border: 1px solid #ccd1d1; padding: 10px; white-space: pre-wrap; font-size: 8.5pt; }
+    .note { background: #fff2cc; border-left: 5px solid #f1c232; padding: 10px; }
+    .ok { color: #217346; font-weight: bold; }
+    .diagram { font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; white-space: pre; background: #f8f9f9; padding: 12px; border: 1px solid #aaa; }
+    ul { margin-top: 5px; }
+  </style>
+</head>
+<body>
+
+<section class="cover">
+  <h1>Práctica 2<br>Videoclub distribuido</h1>
+  <p class="subtitle">Base de datos, microservicios, API REST y optimización</p>
+  <table class="meta">
+    <tr><td>Asignatura</td><td>Sistemas Informáticos</td></tr>
+    <tr><td>Curso</td><td>2026/2027</td></tr>
+    <tr><td>Universidad</td><td>Escuela Politécnica Superior<br>Universidad Autónoma de Madrid</td></tr>
+    <tr><td>Proyecto</td><td>Videoclub implementado con PostgreSQL, Quart y SQLAlchemy Core asíncrono</td></tr>
+    <tr><td>Entrega</td><td>P2.zip</td></tr>
+  </table>
+  <p>Memoria técnica de la solución implementada.</p>
+</section>
+
+<h2>1. Introducción y objetivos</h2>
+<p>
+  El objetivo de esta práctica es construir un videoclub distribuido mediante dos
+  microservicios independientes. Los usuarios pueden registrarse, autenticarse,
+  consultar un catálogo de películas, recargar su saldo, reservar películas en
+  un carrito, pagar el carrito y valorar películas. Los administradores pueden
+  gestionar el catálogo y consultar el historial de ventas por año y país.
+</p>
+<p>
+  La solución utiliza PostgreSQL como fuente única de datos, Docker Compose para
+  orquestar los contenedores, Quart como servidor HTTP asíncrono y SQLAlchemy
+  Core con el dialecto asíncrono de PostgreSQL para todas las consultas desde
+  Python.
+</p>
+
+<h2>2. Planificación del desarrollo</h2>
+<p>
+  Se ha seguido la planificación recomendada en el enunciado. Esta división
+  permite cerrar primero la consistencia de los datos, después exponerla de
+  forma segura mediante los servicios y, finalmente, medir y documentar el
+  rendimiento.
+</p>
+<table>
+  <tr><th>Periodo</th><th>Trabajo planificado</th><th>Resultado</th></tr>
+  <tr>
+    <td><b>Semana 1</b></td>
+    <td>Diseño de la base de datos, relaciones, restricciones, triggers y
+      procedimientos/funciones almacenadas.</td>
+    <td>Modelo relacional de usuarios, catálogo, carritos, compras y
+      valoraciones; <code>schema.sql</code> y <code>populate.sql</code>.</td>
+  </tr>
+  <tr>
+    <td><b>Semana 2</b></td>
+    <td>Programación de la API REST y de los dos microservicios.</td>
+    <td>Servicios Quart asíncronos, autenticación stateless, endpoints de
+      usuarios y videoclub, cliente de pruebas y contenedores.</td>
+  </tr>
+  <tr>
+    <td><b>Resto de días hasta la entrega</b></td>
+    <td>Optimización de la consulta, memoria y preparación de la entrega.</td>
+    <td><code>EXPLAIN</code> antes/después, índices, función optimizada,
+      README, cliente de tolerancia a fallos y esta memoria.</td>
+  </tr>
+</table>
+
+<h2>3. Arquitectura de la solución</h2>
+<h3>3.1. Componentes</h3>
+<table>
+  <tr><th>Componente</th><th>Responsabilidad</th><th>Puerto</th></tr>
+  <tr><td>PostgreSQL 16</td><td>Persistencia, restricciones, transacciones,
+    triggers y funciones almacenadas.</td><td>9999</td></tr>
+  <tr><td><code>user_service</code></td><td>Alta, login, logout, recarga y
+    baja lógica de usuarios.</td><td>5050</td></tr>
+  <tr><td><code>api_service</code></td><td>Catálogo, carritos, pagos,
+    valoraciones e informe de ventas.</td><td>5051</td></tr>
+  <tr><td><code>client.py</code></td><td>Pruebas funcionales y casos de error
+    contra ambos servicios.</td><td>-</td></tr>
+</table>
+<div class="diagram">
+                    HTTP/JSON
+  client.py ------------------------------+
+       |                                  |
+       v                                  v
+  user_service:5050                 api_service:5051
+       |                                  |
+       +------------- SQLAlchemy ---------+
+                         |
+                         v
+                 PostgreSQL:5432
+                         |
+                 volumen Docker
+</div>
+<p>
+  Los dos servicios se encuentran en la red privada de Compose y acceden al
+  host <code>database</code>. Desde el ordenador se publican los puertos
+  indicados para poder ejecutar el cliente y observar las respuestas.
+</p>
+
+<h3>3.2. Persistencia y configuración</h3>
+<p>
+  PostgreSQL utiliza el volumen <code>p2_database_data</code>, montado en
+  <code>/var/lib/postgresql/data</code>. Los scripts
+  <code>database/schema.sql</code> y <code>database/populate.sql</code> se
+  montan en <code>/docker-entrypoint-initdb.d</code> y se ejecutan
+  automáticamente la primera vez que se inicializa un volumen vacío.
+</p>
+<p>
+  El secreto de sesión se proporciona mediante <code>.env</code> y no se
+  incluye en el repositorio. <code>.env.example</code> sirve como plantilla y
+  los dos servicios reciben el mismo valor de <code>TOKEN_SECRET</code>.
+</p>
+
+<h2>4. Diseño de la base de datos</h2>
+<h3>4.1. Entidades principales</h3>
+<table>
+  <tr><th>Tabla</th><th>Información</th><th>Decisiones relevantes</th></tr>
+  <tr><td><code>users</code></td><td>Cuenta, país, saldo, rol y estado.</td>
+    <td><code>username</code> único; saldo no negativo; baja lógica con
+      <code>active</code>; <code>session_version</code> invalida tokens.</td></tr>
+  <tr><td><code>directors</code></td><td>Directores del catálogo.</td>
+    <td>Una película puede conservarse aunque su director se elimine:
+      <code>ON DELETE SET NULL</code>.</td></tr>
+  <tr><td><code>actors</code></td><td>Actores.</td>
+    <td>Se relacionan con películas mediante una tabla intermedia.</td></tr>
+  <tr><td><code>films</code></td><td>Título, año, precio, stock y director.</td>
+    <td>Precio y stock no negativos; <code>active</code> permite borrado
+      lógico y conserva el historial.</td></tr>
+  <tr><td><code>carts</code></td><td>Pedido abierto, pagado o cancelado.</td>
+    <td>Un único carrito abierto por usuario mediante índice único parcial.</td></tr>
+  <tr><td><code>cart_films</code></td><td>Líneas, cantidades y precio histórico.</td>
+    <td>Clave primaria compuesta; <code>unit_price</code> evita que el precio
+      actual modifique compras ya iniciadas.</td></tr>
+  <tr><td><code>ratings</code></td><td>Valoración de usuario y película.</td>
+    <td>Valor entre 0 y 10; una valoración por usuario y película.</td></tr>
+  <tr><td><code>film_actors</code></td><td>Relación película-actor.</td>
+    <td>Resuelve la relación N:M y conserva el personaje interpretado.</td></tr>
+</table>
+
+<h3>4.2. Diagrama entidad-relación</h3>
+<div class="diagram">
+ USERS 1 -------- N CARTS 1 -------- N CART_FILMS N -------- 1 FILMS
+   |                  |                                      |
+   |                  |                                      | N
+   |                  |                                      | 
+   |                  |                                      1 DIRECTORS
+   |                  |
+   |                  +-- estado, total_price, paid_at
+   |
+   +-- N RATINGS N -- 1 FILMS
+
+ FILMS 1 -------- N FILM_ACTORS N -------- 1 ACTORS
+
+ Claves: users.user_id, films.film_id, carts.cart_id.
+ Clave compuesta: cart_films(cart_id, film_id).
+ Clave compuesta: film_actors(film_id, actor_id).
+</div>
+<p>
+  El modelo garantiza la integridad mediante claves foráneas, restricciones
+  <code>CHECK</code>, unicidad y acciones de borrado adecuadas. Las compras se
+  conservan como líneas históricas aunque una película se desactive.
+</p>
+
+<h2>5. Triggers y funciones almacenadas</h2>
+<h3>5.1. Gestión automática del carrito</h3>
+<ul>
+  <li><code>manage_cart_film_stock()</code>: bloquea el carrito, comprueba que
+    está abierto y descuenta stock al insertar o aumentar una línea. Al borrar
+    o reducir unidades, devuelve el stock.</li>
+  <li><code>recalculate_cart_total()</code>: recalcula
+    <code>carts.total_price</code> después de cada cambio en
+    <code>cart_films</code>.</li>
+  <li><code>handle_cart_status_change()</code>: al cambiar a
+    <code>paid</code>, comprueba saldo, descuenta el coste y establece
+    <code>paid_at</code>. Impide pagar carritos vacíos o pagar dos veces.</li>
+</ul>
+<h3>5.2. Funciones de negocio</h3>
+<table>
+  <tr><th>Función</th><th>Uso</th></tr>
+  <tr><td><code>get_or_create_open_cart</code></td><td>Obtiene o crea el
+    carrito abierto de un usuario activo.</td></tr>
+  <tr><td><code>add_film_to_cart</code></td><td>Aumenta una línea o la crea;
+    los triggers reservan stock y calculan el total.</td></tr>
+  <tr><td><code>remove_film_from_cart</code></td><td>Elimina una línea y
+    devuelve las unidades reservadas.</td></tr>
+  <tr><td><code>pay_open_cart</code></td><td>Cambia el estado a pagado y
+    devuelve identificador, total y fecha.</td></tr>
+  <tr><td><code>cancel_open_cart</code></td><td>Vacía y cancela un carrito
+    abierto, liberando stock.</td></tr>
+  <tr><td><code>average_film_rating</code></td><td>Calcula la media de las
+    valoraciones y devuelve cero si no hay votos.</td></tr>
+  <tr><td><code>sales_by_year_country</code></td><td>Devuelve las líneas
+    vendidas para un año y un país.</td></tr>
+</table>
+<div class="note">
+  En PostgreSQL se han utilizado funciones almacenadas porque las consultas de
+  valoración e informe devuelven datos y pueden invocarse desde un
+  <code>SELECT</code>. Cumplen la finalidad de los procedimientos almacenados
+  solicitados y centralizan la lógica en la base de datos.
+</div>
+
+<h2>6. Implementación de los microservicios</h2>
+<h3>6.1. SQLAlchemy Core asíncrono</h3>
+<p>
+  La conexión se configura con <code>create_async_engine</code> y
+  <code>AsyncSession</code>. Todas las rutas que acceden a PostgreSQL son
+  <code>async def</code> y ejecutan las sentencias con
+  <code>await session.execute(text(...), parametros)</code>.
+</p>
+<pre>async with async_session() as session:
+    async with session.begin():
+        result = await session.execute(
+            text("SELECT ... WHERE film_id = :film_id"),
+            {"film_id": film_id},
+        )</pre>
+<p>
+  Las consultas son parametrizadas. No se interpolan datos recibidos por HTTP
+  en el SQL. Las operaciones complejas combinan autenticación y modificación
+  de datos con CTEs o funciones SQL para respetar el requisito de un único
+  <code>execute()</code> por operación.
+</p>
+
+<h3>6.2. Autenticación stateless</h3>
+<p>
+  Al iniciar sesión se incrementa <code>session_version</code>. El token
+  contiene internamente el identificador y la versión, y se cifra con Fernet
+  usando una clave derivada de <code>TOKEN_SECRET</code>. El token se envía en
+  <code>Authorization: Bearer &lt;token&gt;</code>. No se almacenan tokens.
+  Cada endpoint protegido descifra el token y valida en SQL que el usuario
+  sigue activo y que la versión coincide. Login, logout y baja lógica
+  invalidan tokens anteriores.
+</p>
+
+<h3>6.3. Endpoints</h3>
+<table>
+  <tr><th>Servicio</th><th>Método y ruta</th><th>Resultado</th></tr>
+  <tr><td>Usuarios</td><td><code>PUT /user</code></td><td>Alta.</td></tr>
+  <tr><td>Usuarios</td><td><code>POST /user/login</code></td><td>Autenticación
+    y token.</td></tr>
+  <tr><td>Usuarios</td><td><code>POST /user/logout</code></td><td>Invalidación
+    de sesión.</td></tr>
+  <tr><td>Usuarios</td><td><code>PATCH /user/recharge</code></td><td>Recarga
+    de saldo.</td></tr>
+  <tr><td>Usuarios</td><td><code>DELETE /user</code></td><td>Baja lógica.</td></tr>
+  <tr><td>Videoclub</td><td><code>POST /films</code></td><td>Alta de película
+    para administradores.</td></tr>
+  <tr><td>Videoclub</td><td><code>DELETE /films/&lt;id&gt;</code></td><td>Baja
+    lógica de película.</td></tr>
+  <tr><td>Videoclub</td><td><code>GET /films</code></td><td>Listado filtrable.</td></tr>
+  <tr><td>Videoclub</td><td><code>POST /cart/films</code></td><td>Añadir al
+    carrito.</td></tr>
+  <tr><td>Videoclub</td><td><code>POST /cart/pay</code></td><td>Pago y fecha.</td></tr>
+  <tr><td>Videoclub</td><td><code>PUT /films/&lt;id&gt;/rating</code></td><td>Voto.</td></tr>
+  <tr><td>Videoclub</td><td><code>GET /films/&lt;id&gt;/rating</code></td><td>Media.</td></tr>
+  <tr><td>Videoclub</td><td><code>GET /ventas/&lt;año&gt;/&lt;país&gt;</code></td><td>Informe
+    de ventas para administradores.</td></tr>
+</table>
+
+<h2>7. Cliente de pruebas y tolerancia a fallos</h2>
+<p>
+  El fichero <code>client/client.py</code> usa <code>requests</code> y ofrece
+  el modo <code>--examples</code>. Cada petición muestra el cuerpo y compara
+  el código HTTP recibido con el código esperado. Los errores de red se
+  capturan y se informa del problema sin abortar la batería completa.
+</p>
+<table>
+  <tr><th>Área</th><th>Casos correctos</th><th>Casos de error comprobados</th></tr>
+  <tr><td>Usuarios</td><td>Alta, login, recarga, logout y baja.</td>
+    <td>Duplicado, credenciales erróneas, campos vacíos, recarga negativa y
+      petición sin token.</td></tr>
+  <tr><td>Catálogo</td><td>Listado por título, año, director y actor.</td>
+    <td>Año no numérico, creación sin permisos y sin token.</td></tr>
+  <tr><td>Carrito</td><td>Añadir unidades y pagar.</td>
+    <td>Película inexistente, cantidad cero, pago sin carrito.</td></tr>
+  <tr><td>Valoraciones</td><td>Crear, modificar y consultar media.</td>
+    <td>Valor fuera de 0-10 y película inexistente.</td></tr>
+  <tr><td>Ventas</td><td>Consulta de administrador.</td>
+    <td>Consulta de usuario normal.</td></tr>
+  <tr><td>Sesión</td><td>Logout y nueva autenticación.</td>
+    <td>Reutilización de token invalidado y login de usuario dado de baja.</td></tr>
+</table>
+<pre>cd p2
+cp .env.example .env
+docker compose up -d --build
+python -m pip install -r requirements.txt
+python client/client.py --examples</pre>
+<p>
+  La salida del cliente debe incluir respuestas 2xx para las operaciones
+  correctas y los códigos 400, 401, 403, 404 o 409 esperados en los casos
+  inválidos. Para la entrega se recomienda incluir una captura de esta salida
+  y otra de <code>docker compose ps</code>.
+</p>
+
+<h2>8. Optimización de ventas</h2>
+<h3>8.1. Problema inicial</h3>
+<p>
+  El informe une <code>carts</code>, <code>users</code>,
+  <code>cart_films</code> y <code>films</code>, filtra por compras pagadas,
+  año de pago y país, y ordena por fecha, carrito y película. La versión
+  inicial aplicaba <code>EXTRACT(YEAR FROM paid_at)</code>. Al aplicar una
+  función sobre la columna, un índice normal sobre <code>paid_at</code> no
+  puede utilizarse de forma eficaz para localizar directamente el intervalo.
+</p>
+<h3>8.2. Estrategia</h3>
+<ol>
+  <li>Ejecutar el plan base con <code>EXPLAIN (ANALYZE, BUFFERS,
+    VERBOSE)</code>.</li>
+  <li>Crear el índice parcial
+    <code>carts(paid_at, user_id, cart_id) WHERE status = 'paid'</code>.
+    Solo almacena las filas que puede devolver el informe.</li>
+  <li>Crear el índice funcional
+    <code>users(LOWER(country), user_id)</code>, coherente con el filtro
+    insensible a mayúsculas.</li>
+  <li>Sustituir el filtro del año por
+    <code>paid_at &gt;= inicio</code> y
+    <code>paid_at &lt; fin</code>. Este predicado permite un index scan o
+    bitmap index scan según el tamaño de la tabla y la distribución.</li>
+  <li>Repetir el mismo EXPLAIN y comparar coste estimado, tiempo real,
+    buffers leídos y nodos de acceso.</li>
+</ol>
+<p>
+  Todas las sentencias están en <code>database/optimizacion.sql</code>. El
+  script también reemplaza <code>sales_by_year_country()</code> para que la
+  API aplique la misma estrategia, no solo el ejemplo de laboratorio.
+</p>
+<pre>psql "postgresql://alumnodb:1234@localhost:9999/si1" \
+  -f database/optimizacion.sql</pre>
+<div class="note">
+  Los tiempos y el plan exacto dependen de la cantidad de filas, estadísticas
+  y caché del servidor. La comparación que se entregue debe acompañarse de
+  las salidas obtenidas en el entorno de ejecución. En una base pequeña es
+  normal que PostgreSQL elija un sequential scan porque resulta más barato;
+  el índice sigue siendo útil cuando crece el histórico.
+</div>
+
+<h2>9. Seguridad, consistencia y decisiones</h2>
+<ul>
+  <li>Las contraseñas no se almacenan en claro; se guarda su hash SHA-256.</li>
+  <li>Los tokens son Fernet y el secreto se configura fuera del repositorio.</li>
+  <li>Los valores HTTP se envían como parámetros de SQLAlchemy, evitando
+    inyección SQL.</li>
+  <li>Los pagos se realizan dentro de una transacción y el descuento verifica
+    saldo suficiente.</li>
+  <li>Los triggers serializan el acceso al carrito y actualizan stock y total
+    en la base de datos, evitando inconsistencias entre clientes.</li>
+  <li>Las películas y usuarios se desactivan lógicamente para conservar el
+    historial de operaciones.</li>
+  <li>Las restricciones de PostgreSQL actúan como última barrera de integridad,
+    incluso si otro cliente accede directamente a la base de datos.</li>
+</ul>
+
+<h2>10. Organización de la entrega</h2>
+<p>
+  La entrega debe ser un único archivo <code>P2.zip</code> con los fuentes,
+  scripts SQL, dependencias, Docker Compose, cliente y esta memoria en PDF.
+  No deben incluirse entornos virtuales, cachés, bytecode ni metadatos del
+  sistema operativo.
+</p>
+<pre>find . -type d \( -name __pycache__ -o -name .venv -o -name venv \) \
+  -prune -exec rm -rf {} +
+find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+zip -r P2.zip . -x '*.git/*' '*.env' '*.venv/*' '*__pycache__/*'</pre>
+<p>
+  Antes de comprimir se debe levantar la aplicación desde un volumen limpio,
+  ejecutar el cliente, guardar capturas de las pruebas, ejecutar la
+  optimización y añadir las salidas de EXPLAIN a la memoria.
+</p>
+
+<h2>11. Conclusiones</h2>
+<p>
+  La implementación separa claramente la gestión de usuarios de la lógica del
+  videoclub, manteniendo una única base de datos transaccional. La lógica
+  crítica de stock, totales y pagos reside en PostgreSQL mediante triggers y
+  funciones, mientras que Quart expone una interfaz REST asíncrona y
+  parametrizada. El cliente automatiza tanto los casos normales como los
+  errores y el script de optimización deja reproducible la comparación del
+  informe de ventas.
+</p>
+
+</body>
+</html>

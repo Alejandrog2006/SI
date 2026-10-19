@@ -116,19 +116,24 @@ Estas funciones permiten que cada endpoint complejo utilice un único `execute()
 
 ## Autenticación sin estado
 
-El login incrementa `session_version` y genera un token con este contenido:
+El login incrementa `session_version` y genera un token Fernet cifrado cuyo
+contenido interno es:
 
 ```text
-user_id:session_version:firma_HMAC
+user_id:session_version
 ```
 
-El token se codifica en Base64 y se envía mediante:
+El token cifrado se envía mediante:
 
 ```http
 Authorization: Bearer <token>
 ```
 
-Los tokens no se almacenan. Cada operación protegida comprueba la firma en Python y valida en su única sentencia SQL que el usuario esté activo y que la versión coincida. Login y logout incrementan la versión, por lo que los tokens anteriores dejan de ser válidos.
+Los tokens no se almacenan. Fernet cifra el contenido y autentica cualquier
+modificación. Cada operación protegida descifra el token en Python y valida en
+su única sentencia SQL que el usuario esté activo y que la versión coincida.
+Login y logout incrementan la versión, por lo que los tokens anteriores dejan
+de ser válidos.
 
 ## Endpoints
 
@@ -171,6 +176,7 @@ No se introducen valores mediante `f-string`. Cada operación combina autenticac
 ## Estado de implementación
 
 - El esquema, los datos iniciales y el servicio de usuarios están desarrollados.
-- Los endpoints de `api.py` están definidos y documentados, pero sus consultas siguen pendientes.
-- El cliente contiene creación de usuario y login; faltan las demás comprobaciones.
-- `optimizacion.sql` conserva la estructura explicativa, pero faltan los planes `EXPLAIN` y los índices definitivos.
+- Los endpoints de `api.py` están implementados con consultas parametrizadas.
+- `client.py` cubre casos correctos y errores esperados de ambos servicios.
+- `optimizacion.sql` contiene los planes `EXPLAIN` antes y después, los índices
+  y la función optimizada de ventas.

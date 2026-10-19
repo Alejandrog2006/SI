@@ -1,25 +1,31 @@
-"""API del catalogo, carrito, pagos, valoraciones e informe de ventas."""
+"""API del catalogo, carrito, pagos, valoraciones e informe de ventas.
+
+    Autores: Manuel Salvador Mayor y Alejandro González García
+"""
 
 import base64
 import binascii
 import hashlib
-import hmac
 import os
 from decimal import Decimal, InvalidOperation
 
+from cryptography.fernet import Fernet, InvalidToken
 from quart import Quart, jsonify, request
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 
 # Aplicacion Quart que publica los endpoints del videoclub.
 app = Quart(__name__)
 
-# Ambos servicios comparten la base de datos y el secreto de firma de los tokens.
+# Ambos servicios comparten la base de datos y el secreto de cifrado de los tokens.
 DATABASE_URL = os.environ["DATABASE_URL"]
 TOKEN_SECRET = os.environ["TOKEN_SECRET"].encode()
+TOKEN_CIPHER = Fernet(
+    base64.urlsafe_b64encode(hashlib.sha256(TOKEN_SECRET).digest())
+)
 
 # Motor y fabrica de sesiones asincronas para ejecutar SQL mediante await.
 engine = create_async_engine(DATABASE_URL, echo=False)
@@ -29,33 +35,17 @@ async_session = sessionmaker(
     class_=AsyncSession,
 )
 
-# El PDF incluye Base, aunque las tablas se crean en schema.sql y no mediante ORM.
-Base = declarative_base()
-
-
 def decode_token(token):
-    """Comprueba la firma y devuelve (user_id, session_version), o None."""
+    """Descifra y valida el token, o devuelve None si no es válido."""
     if not token:
         return None
 
     try:
-        # El contenido tiene el formato user_id:session_version:firma.
-        token_data = base64.urlsafe_b64decode(token.encode()).decode()
-        user_id, session_version, signature = token_data.split(":")
-        payload = f"{user_id}:{session_version}"
-
-        # Recalcula la firma con el secreto que tambien utiliza user_service.
-        expected_signature = hmac.new(
-            TOKEN_SECRET,
-            payload.encode(),
-            hashlib.sha256,
-        ).hexdigest()
-
-        if not hmac.compare_digest(signature, expected_signature):
-            return None
-
+        user_id, session_version = TOKEN_CIPHER.decrypt(
+            token.encode()
+        ).decode().split(":")
         return int(user_id), int(session_version)
-    except (ValueError, UnicodeDecodeError, binascii.Error):
+    except (InvalidToken, ValueError, UnicodeDecodeError, binascii.Error):
         return None
 
 
