@@ -42,9 +42,9 @@ Desde esta carpeta:
 Edita `.env` y establece un secreto largo y aleatorio. No subas `.env` al
 repositorio; está excluido por `.gitignore`.
 
-    docker compose build
-    docker compose up -d
-    docker compose ps
+    docker-compose build
+    docker-compose up -d
+    docker-compose ps
 
 La primera ejecución crea el esquema y carga los datos de prueba cuando el
 volumen PostgreSQL está vacío. Los datos persisten en el volumen Docker
@@ -53,8 +53,8 @@ ejecutar en reinicios normales.
 
 Para reiniciar completamente la base de datos de desarrollo:
 
-    docker compose down -v
-    docker compose up -d --build
+    docker-compose down -v
+    docker-compose up -d --build
 
 Puertos publicados:
 
@@ -108,8 +108,8 @@ El cliente continúa aunque un caso falle y comprueba:
 
 Ejecuta el script con `psql` después de iniciar PostgreSQL:
 
-    psql "postgresql://alumnodb:1234@localhost:9999/si1" \
-      -f database/optimizacion.sql
+    docker exec -i si_p2_database psql -U alumnodb -d si1 \
+      < database/optimizacion.sql
 
 El script muestra el plan base con `EXPLAIN (ANALYZE, BUFFERS)`, crea:
 

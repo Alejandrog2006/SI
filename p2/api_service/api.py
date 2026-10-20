@@ -28,7 +28,7 @@ TOKEN_CIPHER = Fernet(
 )
 
 # Motor y fabrica de sesiones asincronas para ejecutar SQL mediante await.
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 async_session = sessionmaker(
     engine,
     expire_on_commit=False,
@@ -60,6 +60,12 @@ def get_bearer_token():
     return token
 
 
+async def get_json_object():
+    """Devuelve el cuerpo JSON si es un objeto, o None para datos inválidos."""
+    data = await request.get_json(silent=True)
+    return data if isinstance(data, dict) else None
+
+
 @app.route("/films", methods=["POST"])
 async def create_film():
     """Crea una pelicula si la sesion pertenece a un administrador."""
@@ -68,14 +74,18 @@ async def create_film():
         return jsonify({"error": "Autenticacion requerida"}), 401
 
     user_id, session_version = token_data
-    data = await request.get_json(silent=True) or {}
+    data = await get_json_object()
+    if data is None:
+        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
 
     # title, price y stock son obligatorios; año y director son opcionales.
     if any(field not in data for field in ("title", "price", "stock")):
         return jsonify({"error": "title, price y stock son obligatorios"}), 400
 
     try:
-        title = str(data["title"]).strip()
+        if not isinstance(data["title"], str):
+            raise TypeError
+        title = data["title"].strip()
         price = Decimal(str(data["price"]))
         stock = int(data["stock"])
         release_year = data.get("release_year")
@@ -85,9 +95,17 @@ async def create_film():
     except (TypeError, ValueError, InvalidOperation):
         return jsonify({"error": "Los datos de la pelicula no son validos"}), 400
 
-    if not title or not price.is_finite() or price < 0 or stock < 0:
+    if (
+        not title
+        or len(title) > 100
+        or not price.is_finite()
+        or price < 0
+        or price > Decimal("99999999.99")
+        or stock < 0
+        or stock > 2147483647
+    ):
         return jsonify({
-            "error": "title no puede estar vacio; price y stock deben ser no negativos"
+            "error": "title, price o stock están fuera de los límites permitidos"
         }), 400
 
     if release_year is not None and not 1888 <= release_year <= 9999:
@@ -156,22 +174,34 @@ async def delete_film(film_id):
 
     async with async_session() as session:
         async with session.begin():
-            # El borrado logico conserva las peliculas incluidas en compras antiguas.
+            # Los CTE distinguen permisos y existencia manteniendo un solo execute().
             result = await session.execute(
                 text("""
-                    UPDATE films
-                    SET active = FALSE
-                    WHERE film_id = :film_id
-                      AND active = TRUE
-                      AND EXISTS (
-                          SELECT 1
-                          FROM users
-                          WHERE user_id = :user_id
-                            AND session_version = :session_version
-                            AND active = TRUE
-                            AND role = 'admin'
-                      )
-                    RETURNING film_id
+                    WITH authenticated_admin AS MATERIALIZED (
+                        SELECT user_id
+                        FROM users
+                        WHERE user_id = :user_id
+                          AND session_version = :session_version
+                          AND active = TRUE
+                          AND role = 'admin'
+                    ),
+                    selected_film AS MATERIALIZED (
+                        SELECT film_id
+                        FROM films
+                        WHERE film_id = :film_id
+                          AND active = TRUE
+                    ),
+                    deleted_film AS (
+                        UPDATE films
+                        SET active = FALSE
+                        WHERE film_id IN (SELECT film_id FROM selected_film)
+                          AND EXISTS (SELECT 1 FROM authenticated_admin)
+                        RETURNING film_id
+                    )
+                    SELECT
+                        EXISTS (SELECT 1 FROM authenticated_admin) AS authorized,
+                        EXISTS (SELECT 1 FROM selected_film) AS film_exists,
+                        (SELECT film_id FROM deleted_film) AS film_id
                 """),
                 {
                     "film_id": film_id,
@@ -179,12 +209,12 @@ async def delete_film(film_id):
                     "session_version": session_version,
                 },
             )
-            film = result.mappings().first()
+            deletion = result.mappings().first()
 
-    if film is None:
-        return jsonify({
-            "error": "Pelicula inexistente o sesion sin permisos"
-        }), 404
+    if not deletion["authorized"]:
+        return jsonify({"error": "Se requiere una sesión de administrador"}), 403
+    if not deletion["film_exists"]:
+        return jsonify({"error": "La película no existe"}), 404
 
     return jsonify({"message": "Pelicula eliminada"}), 200
 
@@ -201,6 +231,8 @@ async def list_films():
         release_year = int(release_year) if release_year is not None else None
     except ValueError:
         return jsonify({"error": "El año debe ser un numero entero"}), 400
+    if release_year is not None and not 1888 <= release_year <= 9999:
+        return jsonify({"error": "El año está fuera del intervalo permitido"}), 400
 
     async with async_session() as session:
         async with session.begin():
@@ -280,7 +312,9 @@ async def add_cart_film():
         return jsonify({"error": "Token invalido o ausente"}), 401
 
     user_id, session_version = token_data
-    data = await request.get_json(silent=True) or {}
+    data = await get_json_object()
+    if data is None:
+        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
 
     try:
         film_id = int(data.get("film_id"))
@@ -418,7 +452,9 @@ async def rate_film(film_id):
         return jsonify({"error": "Token invalido o ausente"}), 401
 
     user_id, session_version = token_data
-    data = await request.get_json(silent=True) or {}
+    data = await get_json_object()
+    if data is None:
+        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
 
     try:
         rating_value = int(data.get("rating"))
@@ -526,6 +562,9 @@ async def get_average_rating(film_id):
 @app.route("/ventas/<int:year>/<country>", methods=["GET"])
 async def get_sales(year, country):
     """Devuelve las ventas de un año y pais a un administrador autenticado."""
+    if not 1 <= year <= 9999:
+        return jsonify({"error": "El año está fuera del intervalo permitido"}), 400
+
     token_data = decode_token(get_bearer_token())
     if token_data is None:
         return jsonify({"error": "Token invalido o ausente"}), 401

@@ -29,7 +29,7 @@ TOKEN_CIPHER = Fernet(
 
 # El motor mantiene las conexiones asincronas con PostgreSQL. sessionmaker crea
 # una sesion nueva para cada peticion y permite ejecutar SQL mediante await.
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 async_session = sessionmaker(
     engine,
     expire_on_commit=False,
@@ -77,17 +77,33 @@ def get_bearer_token():
     return token
 
 
+async def get_json_object():
+    """Devuelve el cuerpo JSON si es un objeto, o None para datos inválidos."""
+    data = await request.get_json(silent=True)
+    return data if isinstance(data, dict) else None
+
+
 @app.route("/user", methods=["PUT"])
 async def create_user():
     """Crea un usuario activo con saldo cero y rol user."""
     # username, password y country llegan dentro del cuerpo JSON.
-    data = await request.get_json(silent=True) or {}
+    data = await get_json_object()
+    if data is None:
+        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
+
     username = data.get("username")
     password = data.get("password")
     country = data.get("country")
 
+    if not all(isinstance(value, str) for value in (username, password, country)):
+        return jsonify({"error": "username, password y country deben ser texto"}), 400
+
+    username = username.strip()
+    country = country.strip()
     if not username or not password or not country:
         return jsonify({"error": "Faltan datos"}), 400
+    if len(username) > 50 or len(country) > 100 or len(password) > 1024:
+        return jsonify({"error": "Algún campo supera la longitud permitida"}), 400
 
     # PostgreSQL recibe el hash; nunca se almacena la contraseña original.
     password_hash = generate_password(password)
@@ -124,12 +140,21 @@ async def create_user():
 @app.route("/user/login", methods=["POST"])
 async def login():
     """Comprueba las credenciales y devuelve un token de sesion nuevo."""
-    data = await request.get_json(silent=True) or {}
+    data = await get_json_object()
+    if data is None:
+        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
+
     username = data.get("username")
     password = data.get("password")
 
+    if not isinstance(username, str) or not isinstance(password, str):
+        return jsonify({"error": "username y password deben ser texto"}), 400
+
+    username = username.strip()
     if not username or not password:
         return jsonify({"error": "Faltan datos"}), 400
+    if len(username) > 50 or len(password) > 1024:
+        return jsonify({"error": "Algún campo supera la longitud permitida"}), 400
 
     async with async_session() as session:
         async with session.begin():
@@ -206,7 +231,9 @@ async def recharge_balance():
         return jsonify({"error": "Token invalido o ausente"}), 401
 
     user_id, session_version = token_data
-    data = await request.get_json(silent=True) or {}
+    data = await get_json_object()
+    if data is None:
+        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
 
     # Decimal evita los errores de precision que puede introducir float con dinero.
     try:
@@ -214,19 +241,30 @@ async def recharge_balance():
     except (InvalidOperation, TypeError):
         return jsonify({"error": "La cantidad no es valida"}), 400
 
-    if not amount.is_finite() or amount <= 0:
-        return jsonify({"error": "La cantidad debe ser positiva"}), 400
+    if not amount.is_finite() or amount <= 0 or amount > Decimal("99999999.99"):
+        return jsonify({"error": "La cantidad debe ser positiva y válida"}), 400
 
     async with async_session() as session:
         async with session.begin():
             result = await session.execute(
                 text("""
-                    UPDATE users
-                    SET money = money + :amount
-                    WHERE user_id = :user_id
-                      AND session_version = :session_version
-                      AND active = TRUE
-                    RETURNING money
+                    WITH authenticated_user AS MATERIALIZED (
+                        SELECT user_id
+                        FROM users
+                        WHERE user_id = :user_id
+                          AND session_version = :session_version
+                          AND active = TRUE
+                    ),
+                    updated_user AS (
+                        UPDATE users
+                        SET money = money + :amount
+                        WHERE user_id IN (SELECT user_id FROM authenticated_user)
+                          AND money <= 99999999.99 - :amount
+                        RETURNING money
+                    )
+                    SELECT
+                        EXISTS (SELECT 1 FROM authenticated_user) AS authenticated,
+                        (SELECT money FROM updated_user) AS money
                 """),
                 {
                     "amount": amount,
@@ -234,14 +272,16 @@ async def recharge_balance():
                     "session_version": session_version,
                 },
             )
-            user = result.mappings().first()
+            recharge = result.mappings().first()
 
-    if user is None:
+    if not recharge["authenticated"]:
         return jsonify({"error": "Token invalido o expirado"}), 401
+    if recharge["money"] is None:
+        return jsonify({"error": "La recarga supera el saldo máximo"}), 409
 
     return jsonify({
         "message": "Saldo recargado",
-        "money": str(user["money"]),
+        "money": str(recharge["money"]),
     }), 200
 
 

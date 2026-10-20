@@ -30,16 +30,20 @@ def request_json(
     **kwargs: Any,
 ) -> requests.Response | None:
     """Ejecuta una petición, muestra su respuesta y no detiene la batería."""
-    try:
-        response = requests.request(
-            method,
-            url,
-            timeout=REQUEST_TIMEOUT,
-            **kwargs,
-        )
-    except requests.exceptions.RequestException as error:
-        print(f"[ERROR DE RED] {method} {url}: {error}")
-        return None
+    for attempt in range(1, 6):
+        try:
+            response = requests.request(
+                method,
+                url,
+                timeout=REQUEST_TIMEOUT,
+                **kwargs,
+            )
+            break
+        except requests.exceptions.RequestException as error:
+            if attempt == 5:
+                print(f"[ERROR DE RED] {method} {url}: {error}")
+                return None
+            time.sleep(1)
 
     try:
         body = response.json()
@@ -232,6 +236,12 @@ def run_examples() -> None:
     print("=== Disponibilidad y validación de usuarios ===")
     create_user(username, password, "España")
     create_user(username, password, "España", expected_status=409)
+    request_json(
+        "PUT",
+        f"{USER_URL}/user",
+        expected_status=400,
+        json={"username": "tipo_invalido", "password": 1234, "country": "España"},
+    )
     login(username, "contraseña-incorrecta", expected_status=401)
     login(username, "", expected_status=400)
     anonymous_recharge = request_json(
@@ -259,11 +269,14 @@ def run_examples() -> None:
     list_films(actor="Cillian")
     create_film(user_token, "Sin permisos", 1, 1, expected_status=403)
     create_film(None, "Sin token", 1, 1, expected_status=401)
+    delete_film(user_token, 1, expected_status=403)
 
     print("\n=== Carrito, stock y pago ===")
     add_cart_film(user_token, 999999, expected_status=409)
     add_cart_film(user_token, 1, 0, expected_status=400)
     add_cart_film(user_token, 1, 1)
+    pay_cart(user_token, expected_status=409)
+    recharge_balance(user_token, 20)
     pay_cart(user_token)
     pay_cart(user_token, expected_status=404)
 

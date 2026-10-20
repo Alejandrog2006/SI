@@ -7,12 +7,12 @@
     @page { size: A4; margin: 2cm 1.8cm; }
     body { font-family: Arial, sans-serif; color: #222; line-height: 1.42; }
     h1, h2, h3 { color: #17365d; page-break-after: avoid; }
-    h1 { font-size: 26pt; text-align: center; margin-top: 7cm; }
+    h1 { font-size: 26pt; text-align: center; margin-top: 3cm; }
     h2 { font-size: 18pt; border-bottom: 1px solid #5b9bd5; padding-bottom: 4px; margin-top: 26px; }
     h3 { font-size: 13pt; margin-top: 20px; }
     .cover { page-break-after: always; text-align: center; }
     .subtitle { text-align: center; font-size: 15pt; color: #555; }
-    .meta { margin: 3cm auto; width: 75%; border-collapse: collapse; }
+    .meta { margin: 1.5cm auto; width: 75%; border-collapse: collapse; }
     .meta td { border: 1px solid #aaa; padding: 9px; }
     .meta td:first-child { font-weight: bold; background: #eaf2f8; width: 35%; }
     .page-break { page-break-before: always; }
@@ -25,6 +25,9 @@
     .ok { color: #217346; font-weight: bold; }
     .diagram { font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; white-space: pre; background: #f8f9f9; padding: 12px; border: 1px solid #aaa; }
     ul { margin-top: 5px; }
+    img.evidence { width: 100%; border: 1px solid #777; margin: 8px 0 14px; }
+    .caption { font-size: 8.5pt; color: #555; margin-top: -8px; }
+    .page-break { break-before: page; }
   </style>
 </head>
 <body>
@@ -37,6 +40,9 @@
     <tr><td>Curso</td><td>2026/2027</td></tr>
     <tr><td>Universidad</td><td>Escuela Politécnica Superior<br>Universidad Autónoma de Madrid</td></tr>
     <tr><td>Proyecto</td><td>Videoclub implementado con PostgreSQL, Quart y SQLAlchemy Core asíncrono</td></tr>
+    <tr><td>Autores</td><td>Manuel Salvador Mayor<br>Alejandro González García</td></tr>
+    <tr><td>Grupo / equipo</td><td>Grupo 02 · Equipo 1311</td></tr>
+    <tr><td>Fecha</td><td>20 de octubre de 2026</td></tr>
     <tr><td>Entrega</td><td>P2.zip</td></tr>
   </table>
   <p>Memoria técnica de la solución implementada.</p>
@@ -304,15 +310,22 @@
 </table>
 <pre>cd p2
 cp .env.example .env
-docker compose up -d --build
+docker-compose up -d --build
 python -m pip install -r requirements.txt
 python client/client.py --examples</pre>
 <p>
-  La salida del cliente debe incluir respuestas 2xx para las operaciones
-  correctas y los códigos 400, 401, 403, 404 o 409 esperados en los casos
-  inválidos. Para la entrega se recomienda incluir una captura de esta salida
-  y otra de <code>docker compose ps</code>.
+  La ejecución completa terminó sin marcas <code>FALLO</code>. Las capturas
+  siguientes muestran los contenedores activos y la batería de casos correctos
+  y erróneos, incluidos autenticación, permisos, saldo insuficiente, pago,
+  valoraciones, ventas e invalidación de tokens.
 </p>
+<h3>7.1. Evidencias de ejecución</h3>
+<img class="evidence" src="evidence/docker-compose-ps.png" alt="Contenedores activos">
+<p class="caption">Figura 1. Los tres contenedores activos y PostgreSQL en estado healthy.</p>
+<img class="evidence" src="evidence/client-tests-1.png" alt="Primera parte de las pruebas">
+<p class="caption">Figura 2. Usuarios, catálogo, permisos, carrito y pago.</p>
+<img class="evidence" src="evidence/client-tests-2.png" alt="Segunda parte de las pruebas">
+<p class="caption">Figura 3. Valoraciones, ventas, logout y baja lógica.</p>
 
 <h2>8. Optimización de ventas</h2>
 <h3>8.1. Problema inicial</h3>
@@ -346,15 +359,29 @@ python client/client.py --examples</pre>
   script también reemplaza <code>sales_by_year_country()</code> para que la
   API aplique la misma estrategia, no solo el ejemplo de laboratorio.
 </p>
-<pre>psql "postgresql://alumnodb:1234@localhost:9999/si1" \
-  -f database/optimizacion.sql</pre>
-<div class="note">
-  Los tiempos y el plan exacto dependen de la cantidad de filas, estadísticas
-  y caché del servidor. La comparación que se entregue debe acompañarse de
-  las salidas obtenidas en el entorno de ejecución. En una base pequeña es
-  normal que PostgreSQL elija un sequential scan porque resulta más barato;
-  el índice sigue siendo útil cuando crece el histórico.
-</div>
+<pre>docker exec -i si_p2_database psql -U alumnodb -d si1 \
+  &lt; database/optimizacion.sql</pre>
+<h3>8.3. Resultados medidos</h3>
+<p>
+  Para evitar que el tamaño mínimo de <code>populate.sql</code> ocultase el
+  efecto de los índices, se midió con 5.003 usuarios, 50.002 carritos y 50.003
+  líneas. La consulta analizada fue ventas de 2026 para clientes de Francia.
+</p>
+<table>
+  <tr><th>Métrica</th><th>Plan original</th><th>Plan optimizado</th></tr>
+  <tr><td>Acceso a users/carts</td><td>Seq Scan / Seq Scan</td><td>Bitmap Index Scan / Bitmap Index Scan</td></tr>
+  <tr><td>Buffers</td><td>shared hit=2017</td><td>shared hit=1641, read=25</td></tr>
+  <tr><td>Planning Time</td><td>1,963 ms</td><td>3,290 ms</td></tr>
+  <tr><td>Execution Time</td><td>11,614 ms</td><td>4,965 ms</td></tr>
+</table>
+<p>
+  El tiempo de ejecución se redujo aproximadamente un 57,25 %. El ligero
+  aumento del tiempo de planificación queda compensado por la reducción del
+  recorrido de datos. Con las pocas filas iniciales PostgreSQL puede preferir
+  un recorrido secuencial; el beneficio aparece al crecer el histórico.
+</p>
+<img class="evidence" src="evidence/optimization-results.png" alt="Resultados de EXPLAIN antes y después">
+<p class="caption">Figura 4. Resumen de las salidas reales de EXPLAIN (ANALYZE, BUFFERS).</p>
 
 <h2>9. Seguridad, consistencia y decisiones</h2>
 <ul>
@@ -384,9 +411,11 @@ python client/client.py --examples</pre>
 find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 zip -r P2.zip . -x '*.git/*' '*.env' '*.venv/*' '*__pycache__/*'</pre>
 <p>
-  Antes de comprimir se debe levantar la aplicación desde un volumen limpio,
-  ejecutar el cliente, guardar capturas de las pruebas, ejecutar la
-  optimización y añadir las salidas de EXPLAIN a la memoria.
+  La validación final se realizó desde un volumen limpio. Se construyeron los
+  contenedores, se ejecutó el cliente sin fallos, se verificó la persistencia
+  después de reiniciar PostgreSQL y se ejecutó íntegramente
+  <code>optimizacion.sql</code>. Las evidencias se incluyen en los apartados 7
+  y 8.
 </p>
 
 <h2>11. Conclusiones</h2>
