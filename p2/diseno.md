@@ -129,11 +129,12 @@ El token cifrado se envía mediante:
 Authorization: Bearer <token>
 ```
 
-Los tokens no se almacenan. Fernet cifra el contenido y autentica cualquier
-modificación. Cada operación protegida descifra el token en Python y valida en
-su única sentencia SQL que el usuario esté activo y que la versión coincida.
+Los tokens no se almacenan. Fernet cifra el contenido, autentica cualquier
+modificación y añade una marca temporal. Cada operación protegida descifra el
+token en Python con un TTL absoluto de 3600 segundos (1 hora) y valida en su
+única sentencia SQL que el usuario esté activo y que la versión coincida.
 Login y logout incrementan la versión, por lo que los tokens anteriores dejan
-de ser válidos.
+de ser válidos incluso antes de que expire el TTL.
 
 ## Endpoints
 
