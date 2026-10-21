@@ -12,8 +12,9 @@ El proyecto implementa un videoclub mediante dos microservicios Quart:
 Ambos servicios comparten PostgreSQL y acceden a él exclusivamente mediante
 SQLAlchemy Core asíncrono (`AsyncSession`, `text()`, `execute()` y `await`).
 Las consultas son parametrizadas y cada operación de API utiliza un único
-`execute()`. El token de sesión es stateless: se cifra con Fernet y se
-invalida mediante `session_version`, sin almacenarlo en la base de datos.
+`execute()`. El token de sesión es stateless: se cifra con Fernet, caduca
+después de una hora y se invalida mediante `session_version`, sin almacenarlo
+en la base de datos.
 
 ## Estructura
 
@@ -25,7 +26,7 @@ invalida mediante `session_version`, sin almacenarlo en la base de datos.
 - `api_service/api.py`: API REST del videoclub.
 - `client/client.py`: cliente de pruebas funcionales y de errores.
 - `docker-compose.yml`: PostgreSQL y los dos microservicios.
-- `.env.example`: plantilla del secreto de sesión.
+- `.env.example`: secreto de sesión.
 
 ## Requisitos
 
@@ -38,10 +39,6 @@ invalida mediante `session_version`, sin almacenarlo en la base de datos.
 Desde esta carpeta:
 
     cp .env.example .env
-
-Edita `.env` y establece un secreto largo y aleatorio. No subas `.env` al
-repositorio; está excluido por `.gitignore`.
-
     docker-compose build
     docker-compose up -d
     docker-compose ps

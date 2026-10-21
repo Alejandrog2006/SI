@@ -26,6 +26,7 @@ TOKEN_SECRET = os.environ["TOKEN_SECRET"].encode()
 TOKEN_CIPHER = Fernet(
     base64.urlsafe_b64encode(hashlib.sha256(TOKEN_SECRET).digest())
 )
+TOKEN_TTL_SECONDS = 3600
 
 # Motor y fabrica de sesiones asincronas para ejecutar SQL mediante await.
 engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
@@ -42,7 +43,7 @@ def decode_token(token):
 
     try:
         user_id, session_version = TOKEN_CIPHER.decrypt(
-            token.encode()
+            token.encode(), ttl=TOKEN_TTL_SECONDS
         ).decode().split(":")
         return int(user_id), int(session_version)
     except (InvalidToken, ValueError, UnicodeDecodeError, binascii.Error):
