@@ -1,182 +1,183 @@
-# Diseño inicial de la Práctica 2
+# Diseño de la Práctica 2
 
-Este documento recoge las decisiones previas a la implementación de `schema.sql`. El modelo usa PostgreSQL como única fuente de datos y será compartido por los dos microservicios.
+Este documento explica la estructura del videoclub implementado en `p2`. PostgreSQL es la única fuente de datos y se comparte entre los servicios `user_service` y `api_service`.
 
-## Entidades
+## Modelo de datos
 
 ### `users`
 
+Almacena las cuentas de la plataforma:
+
 - `user_id`: identificador interno.
-- `username`: nombre único.
-- `password_hash`: contraseña almacenada mediante hash.
-- `country`: nacionalidad utilizada por la consulta de ventas.
-- `balance`: saldo disponible, nunca negativo.
-- `session_version`: versión de sesión empleada para invalidar tokens sin guardar el token.
-- `role`: permite reservar la creación y eliminación de películas a administradores.
+- `username`: nombre único utilizado durante el login.
+- `password_hash`: hash SHA-256 de la contraseña.
+- `country`: país usado también por el informe de ventas.
+- `money`: saldo disponible, siempre mayor o igual que cero.
+- `role`: `user` o `admin`.
+- `session_version`: número que invalida tokens anteriores al hacer login o logout.
+- `active`: permite desactivar la cuenta conservando su historial.
 - `created_at`: fecha de alta.
 
-### `directors`
+### `directors` y `actors`
 
-- `director_id`.
-- `name`.
-- `country`.
+Guardan los datos básicos de directores y actores. Una película puede tener un director y varios actores.
 
-### `actors`
+### `films`
 
-- `actor_id`.
-- `name`.
-- `country`.
+Contiene el catálogo:
 
-### `movies`
+- `film_id`, `title` y `release_year` identifican la película.
+- `price` es el precio actual.
+- `stock` indica las unidades que todavía se pueden reservar.
+- `director_id` referencia a `directors`.
+- `active` permite retirar una película sin borrar ventas antiguas.
 
-- `movie_id`.
-- `title`.
-- `release_year`.
-- `price`.
-- `stock`.
-- `director_id`: referencia al director.
-- `created_at`.
+### `carts` y `cart_films`
 
-### `movie_actors`
+`carts` representa un pedido con estado `open`, `paid` o `cancelled`. `paid_at` solo contiene una fecha cuando el carrito está pagado. El índice parcial `one_open_cart_per_user` limita a uno el número de carritos abiertos de cada usuario.
 
-Relación muchos a muchos entre películas y actores.
-
-### `carts`
-
-- `cart_id`.
-- `user_id`.
-- `status`: `open`, `paid` o `cancelled`.
-- `total`: importe mantenido automáticamente.
-- `created_at`.
-- `paid_at`: fecha de pago.
-
-Cada usuario tendrá como máximo un carrito abierto.
-
-### `cart_items`
-
-- `cart_id`.
-- `movie_id`.
-- `quantity`.
-- `unit_price`: conserva el precio que tenía la película cuando se añadió.
-
-La clave primaria será `(cart_id, movie_id)` para impedir que una película aparezca duplicada dentro del mismo carrito.
+`cart_films` relaciona carritos y películas. Su clave primaria es `(cart_id, film_id)`, por lo que una película aparece una sola vez por carrito. `quantity` guarda las unidades y `unit_price` conserva el precio existente cuando se añadieron.
 
 ### `ratings`
 
-- `user_id`.
-- `movie_id`.
-- `score`: valor entre 0 y 10.
-- `created_at`.
+Guarda un voto entre 0 y 10 por usuario y película. La restricción única `(user_id, film_id)` impide votos duplicados y permite actualizarlos con `ON CONFLICT`.
 
-La clave `(user_id, movie_id)` garantiza un único voto por usuario y película.
+### `film_actors`
 
-## Diagrama entidad-relación conceptual
+Resuelve la relación muchos a muchos entre películas y actores y almacena el personaje interpretado.
 
-```mermaid
-flowchart LR
-    USER[USUARIO]
-    CART[CARRITO]
-    MOVIE[PELÍCULA]
-    DIRECTOR[DIRECTOR]
-    ACTOR[ACTOR]
-
-    CREATES{CREA}
-    CONTAINS{CONTIENE}
-    RATES{VALORA}
-    DIRECTS{DIRIGE}
-    ACTS{PARTICIPA}
-
-    USER ---|1| CREATES
-    CREATES ---|N| CART
-    CART ---|N| CONTAINS
-    CONTAINS ---|M| MOVIE
-    USER ---|N| RATES
-    RATES ---|M| MOVIE
-    DIRECTOR ---|1| DIRECTS
-    DIRECTS ---|N| MOVIE
-    ACTOR ---|N| ACTS
-    ACTS ---|M| MOVIE
-
-    QUANTITY((cantidad)) --- CONTAINS
-    UNIT_PRICE((precio unitario)) --- CONTAINS
-    SCORE((puntuación)) --- RATES
-    RATING_DATE((fecha)) --- RATES
-    CHARACTER((personaje)) --- ACTS
-```
-
-Las relaciones muchos a muchos `CONTIENE`, `VALORA` y `PARTICIPA` tienen atributos propios. Al transformar el modelo conceptual al modelo relacional se convierten, respectivamente, en `cart_items`, `ratings` y `movie_actors`.
-
-## Paso al modelo relacional
+## Diagrama entidad-relación
 
 ```mermaid
 erDiagram
-    USERS ||--o{ CARTS : creates
-    USERS ||--o{ RATINGS : writes
-    CARTS ||--|{ CART_ITEMS : contains
-    MOVIES ||--o{ CART_ITEMS : appears_in
-    MOVIES ||--o{ RATINGS : receives
-    DIRECTORS ||--o{ MOVIES : directs
-    MOVIES ||--o{ MOVIE_ACTORS : has
-    ACTORS ||--o{ MOVIE_ACTORS : performs_in
+    USERS ||--o{ CARTS : tiene
+    USERS ||--o{ RATINGS : realiza
+    CARTS ||--o{ CART_FILMS : contiene
+    FILMS ||--o{ CART_FILMS : aparece
+    FILMS ||--o{ RATINGS : recibe
+    DIRECTORS ||--o{ FILMS : dirige
+    FILMS ||--o{ FILM_ACTORS : incluye
+    ACTORS ||--o{ FILM_ACTORS : participa
+
+    USERS {
+        int user_id PK
+        varchar username UK
+        varchar password_hash
+        varchar country
+        decimal money
+        varchar role
+        int session_version
+        boolean active
+    }
+    FILMS {
+        int film_id PK
+        varchar title
+        int release_year
+        decimal price
+        int stock
+        int director_id FK
+        boolean active
+    }
+    CARTS {
+        int cart_id PK
+        int user_id FK
+        decimal total_price
+        varchar status
+        timestamp paid_at
+    }
+    CART_FILMS {
+        int cart_id PK,FK
+        int film_id PK,FK
+        int quantity
+        decimal unit_price
+    }
+    RATINGS {
+        int rating_id PK
+        int user_id FK
+        int film_id FK
+        int rating
+    }
 ```
 
-## Triggers
+## Automatización en PostgreSQL
 
-1. Al insertar o aumentar un elemento del carrito se comprueba y reserva el stock.
-2. Al eliminar o reducir un elemento se devuelve la diferencia al stock.
-3. Después de modificar los elementos se recalcula el total del carrito.
-4. Al cambiar un carrito de `open` a `paid` se comprueba el saldo, se descuenta el total y se asigna `paid_at`.
-5. No se permite modificar un carrito que ya esté pagado o cancelado.
+- `manage_cart_film_stock()` reserva stock al añadir o aumentar unidades y lo devuelve al reducirlas o eliminarlas.
+- `recalculate_cart_total()` recalcula el total después de cambiar una línea.
+- `handle_cart_status_change()` descuenta el saldo y guarda `paid_at` al pagar.
+- `get_or_create_open_cart()` devuelve el carrito abierto o crea uno.
+- `add_film_to_cart()` incrementa una línea existente o crea una nueva.
+- `remove_film_from_cart()` elimina una película del carrito.
+- `pay_open_cart()` cambia el estado a `paid` y devuelve total y fecha.
+- `cancel_open_cart()` devuelve el stock y cancela el carrito.
+- `average_film_rating()` calcula la puntuación media.
+- `sales_by_year_country()` genera el informe requerido por año y país.
 
-El stock se reserva al añadir una película. Esta decisión cumple el ejemplo del enunciado y evita vender más unidades de las disponibles.
+Estas funciones permiten que cada endpoint complejo utilice un único `execute()` desde Python.
 
-## Procedimientos y funciones almacenadas
+## Autenticación sin estado
 
-- Crear o recuperar el carrito abierto de un usuario.
-- Añadir una película al carrito dentro de una única operación.
-- Pagar el carrito de forma atómica.
-- Calcular la valoración media de una película.
-- Recuperar las ventas de un año y país.
+El login incrementa `session_version` y genera un token Fernet cifrado cuyo
+contenido interno es:
 
-La API llamará a cada operación compleja con un único `execute()`, tal como exige el enunciado.
+```text
+user_id:session_version
+```
 
-## Token de sesión
+El token cifrado se envía mediante:
 
-El token incluirá el identificador del usuario y `session_version`, y estará firmado con un secreto compartido. El token completo no se guardará en PostgreSQL. Al hacer login o logout se incrementará `session_version`, invalidando cualquier token anterior.
+```http
+Authorization: Bearer <token>
+```
 
-## Endpoints propuestos
+Los tokens no se almacenan. Fernet cifra el contenido, autentica cualquier
+modificación y añade una marca temporal. Cada operación protegida descifra el
+token en Python con un TTL absoluto de 3600 segundos (1 hora) y valida en su
+única sentencia SQL que el usuario esté activo y que la versión coincida.
+Login y logout incrementan la versión, por lo que los tokens anteriores dejan
+de ser válidos incluso antes de que expire el TTL.
 
-### Servicio `user.py`
+## Endpoints
+
+### Servicio de usuarios, puerto 5050
 
 | Método | Ruta | Operación |
 | --- | --- | --- |
-| `PUT` | `/user` | Crear usuario |
-| `DELETE` | `/user` | Borrar el usuario autenticado |
-| `POST` | `/user/login` | Iniciar sesión y emitir token |
+| `PUT` | `/user` | Crear una cuenta |
+| `POST` | `/user/login` | Iniciar sesión y emitir un token |
 | `POST` | `/user/logout` | Invalidar el token actual |
-| `PATCH` | `/user/balance` | Recargar saldo |
+| `PATCH` | `/user/recharge` | Recargar saldo |
+| `DELETE` | `/user` | Desactivar la cuenta autenticada |
 
-### Servicio `api.py`
+### API del videoclub, puerto 5051
 
 | Método | Ruta | Operación |
 | --- | --- | --- |
-| `PUT` | `/movies` | Crear una película |
-| `DELETE` | `/movies/<movie_id>` | Borrar una película |
-| `GET` | `/movies` | Listar y filtrar películas |
-| `POST` | `/cart/items` | Añadir una película al carrito |
+| `POST` | `/films` | Crear una película |
+| `DELETE` | `/films/<film_id>` | Desactivar una película |
+| `GET` | `/films` | Listar películas por criterios |
+| `POST` | `/cart/films` | Añadir una película al carrito |
 | `POST` | `/cart/pay` | Pagar el carrito abierto |
-| `PUT` | `/movies/<movie_id>/rating` | Crear o reemplazar un voto |
-| `GET` | `/movies/<movie_id>/rating` | Consultar la puntuación media |
+| `PUT` | `/films/<film_id>/rating` | Crear o modificar un voto |
+| `GET` | `/films/<film_id>/rating` | Consultar la puntuación media |
 | `GET` | `/ventas/<year>/<country>` | Consultar ventas por año y país |
 
-## Orden de implementación
+## Consultas SQL desde Python
 
-1. Confirmar el modelo y las reglas anteriores.
-2. Crear `schema.sql` con tablas, restricciones, triggers y funciones.
-3. Crear `populate.sql` con usuarios, películas, directores, actores y compras ficticias.
-4. Crear PostgreSQL y su volumen en `docker-compose.yml`.
-5. Implementar `user.py` con SQLAlchemy Core asíncrono.
-6. Implementar `api.py` con consultas parametrizadas y un solo `execute()` por consulta.
-7. Crear `client.py` con casos correctos y de error.
-8. Medir `/ventas/<year>/<country>` con `EXPLAIN`, añadir índices en `optimizacion.sql` y comparar resultados.
-9. Preparar `memoria.pdf` y `P2.zip`.
+Los servicios escriben SQL manualmente con `text()` y separan los valores mediante parámetros:
+
+```python
+result = await session.execute(
+    text("SELECT * FROM films WHERE release_year = :year"),
+    {"year": year},
+)
+```
+
+No se introducen valores mediante `f-string`. Cada operación combina autenticación y acción en una sola sentencia para respetar el límite de un único `execute()`.
+
+## Estado de implementación
+
+- El esquema, los datos iniciales y el servicio de usuarios están desarrollados.
+- Los endpoints de `api.py` están implementados con consultas parametrizadas.
+- `client.py` cubre casos correctos y errores esperados de ambos servicios.
+- `optimizacion.sql` contiene los planes `EXPLAIN` antes y después, los índices
+  y la función optimizada de ventas.

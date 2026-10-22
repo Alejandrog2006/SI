@@ -1,0 +1,46 @@
+RESULTADOS DE LA OPTIMIZACIÓN DE VENTAS
+=======================================
+
+Entorno medido
+--------------
+
+- PostgreSQL 16 Alpine.
+- 5.003 usuarios, repartidos entre diez países.
+- 50.002 carritos, repartidos entre los años 2018 y 2026.
+- 50.003 líneas de carrito.
+- Consulta medida: ventas de 2026 para usuarios de Francia.
+
+Plan original
+-------------
+
+- PostgreSQL realizó un Seq Scan de users y descartó 4.502 filas.
+- PostgreSQL realizó un Seq Scan de carts y descartó 45.001 filas.
+- Buffers: shared hit=2017.
+- Planning Time: 1,963 ms.
+- Execution Time: 11,614 ms.
+
+Índices añadidos
+----------------
+
+- idx_users_country_user_id sobre LOWER(country), user_id.
+- idx_carts_paid_year_user_id sobre paid_at, user_id, limitado a status='paid'.
+
+También se sustituyó EXTRACT(YEAR FROM paid_at) por un intervalo temporal desde
+el primer instante del año solicitado hasta el primer instante del año siguiente.
+Esto permite utilizar directamente el índice de paid_at.
+
+Plan optimizado
+---------------
+
+- Bitmap Index Scan sobre idx_users_country_user_id.
+- Bitmap Index Scan sobre idx_carts_paid_year_user_id.
+- Buffers: shared hit=1641, read=25.
+- Planning Time: 3,290 ms.
+- Execution Time: 4,965 ms.
+
+Comparación
+-----------
+
+El tiempo de ejecución bajó de 11,614 ms a 4,965 ms, una reducción aproximada
+del 57,25 %. Con los pocos registros de populate.sql PostgreSQL puede preferir
+un recorrido secuencial; la mejora se aprecia al aumentar el volumen de datos.

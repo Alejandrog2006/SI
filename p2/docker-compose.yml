@@ -1,18 +1,63 @@
+# Compose crea una red privada en la que los servicios se localizan por su nombre.
 services:
+  # PostgreSQL almacena usuarios, catalogo, carritos, compras y valoraciones.
   database:
     image: postgres:16-alpine
     container_name: si_p2_database
     environment:
-      POSTGRES_DB: videoclub
-      POSTGRES_USER: si_user
-      POSTGRES_PASSWORD: si_password
+      POSTGRES_DB: si1
+      POSTGRES_USER: alumnodb
+      POSTGRES_PASSWORD: "1234"
     ports:
-      - "5432:5432"
+      # Permite acceder desde el ordenador mediante localhost:9999.
+      - "9999:5432"
     volumes:
+      # Conserva los datos y ejecuta los SQL al inicializar un volumen vacio.
       - p2_database_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./database/populate.sql:/docker-entrypoint-initdb.d/02-populate.sql:ro
+    healthcheck:
+      # Los servicios Python esperan hasta que PostgreSQL acepte conexiones.
+      test: ["CMD-SHELL", "pg_isready -U alumnodb -d si1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
+  # Servicio responsable del alta, login, logout, saldo y baja de usuarios.
+  user_service:
+    build:
+      context: .
+      dockerfile: user_service/Dockerfile
+    container_name: si_p2_users
+    environment:
+      # Dentro de Compose se usa database:5432, no localhost:9999.
+      DATABASE_URL: postgresql+asyncpg://alumnodb:1234@database:5432/si1
+      # Ambos servicios deben compartir el secreto definido fuera del repositorio.
+      TOKEN_SECRET: ${TOKEN_SECRET:?Define TOKEN_SECRET in .env}
+    ports:
+      - "5050:5050"
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Servicio del catalogo, carritos, pagos, puntuaciones e informe de ventas.
+  api_service:
+    build:
+      context: .
+      dockerfile: api_service/Dockerfile
+    container_name: si_p2_api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://alumnodb:1234@database:5432/si1
+      TOKEN_SECRET: ${TOKEN_SECRET:?Define TOKEN_SECRET in .env}
+    ports:
+      - "5051:5051"
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+
+# Volumen administrado por Docker para que PostgreSQL persista entre reinicios.
 volumes:
   p2_database_data:
