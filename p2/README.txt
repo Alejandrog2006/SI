@@ -26,7 +26,7 @@ en la base de datos.
 - `api_service/api.py`: API REST del videoclub.
 - `client/client.py`: cliente de pruebas funcionales y de errores.
 - `docker-compose.yml`: PostgreSQL y los dos microservicios.
-- `.env.example`: secreto de sesión.
+- `.env.example`: plantilla del secreto de sesión.
 
 ## Requisitos
 
@@ -39,6 +39,10 @@ en la base de datos.
 Desde esta carpeta:
 
     cp .env.example .env
+
+Sustituye el valor de `TOKEN_SECRET` en `.env` por un secreto largo y no subas
+ese archivo al repositorio.
+
     docker-compose build
     docker-compose up -d
     docker-compose ps

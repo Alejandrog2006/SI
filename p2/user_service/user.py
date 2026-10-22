@@ -26,6 +26,7 @@ TOKEN_SECRET = os.environ["TOKEN_SECRET"].encode()
 TOKEN_CIPHER = Fernet(
     base64.urlsafe_b64encode(hashlib.sha256(TOKEN_SECRET).digest())
 )
+# Fernet incorpora la fecha de creación; pasado este tiempo rechaza el token.
 TOKEN_TTL_SECONDS = 3600
 
 # El motor mantiene las conexiones asincronas con PostgreSQL. sessionmaker crea
@@ -57,6 +58,7 @@ def decode_token(token):
         return None
 
     try:
+        # ttl comprueba además que el token no tenga más de una hora.
         user_id, session_version = TOKEN_CIPHER.decrypt(
             token.encode(), ttl=TOKEN_TTL_SECONDS
         ).decode().split(":")
