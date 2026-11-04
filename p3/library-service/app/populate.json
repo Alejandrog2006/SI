@@ -1,0 +1,169 @@
+[
+  {
+    "isbn": "978-0451524935",
+    "title": "1984",
+    "author": "George Orwell",
+    "year": 1949,
+    "publisher": "Signet Classic",
+    "available_stock": 4,
+    "loan_history": [
+      {
+        "user_id": "user_alice",
+        "loan_date": "2025-01-10T10:00:00.000Z",
+        "return_date": "2025-01-24T16:30:00.000Z"
+      }
+    ]
+  },
+  {
+    "isbn": "978-0061120084",
+    "title": "To Kill a Mockingbird",
+    "author": "Harper Lee",
+    "year": 1960,
+    "publisher": "J.B. Lippincott & Co.",
+    "available_stock": 3,
+    "loan_history": [
+      {
+        "user_id": "user_bob",
+        "loan_date": "2025-02-01T09:15:00.000Z",
+        "return_date": "2025-02-15T12:00:00.000Z"
+      },
+      {
+        "user_id": "user_carol",
+        "loan_date": "2025-02-20T11:00:00.000Z",
+        "return_date": "2025-03-05T17:45:00.000Z"
+      }
+    ]
+  },
+  {
+    "isbn": "978-0060850524",
+    "title": "Brave New World",
+    "author": "Aldous Huxley",
+    "year": 1932,
+    "publisher": "Chatto & Windus",
+    "available_stock": 2,
+    "loan_history": [
+      {
+        "user_id": "user_dave",
+        "loan_date": "2025-01-05T08:30:00.000Z",
+        "return_date": "2025-01-19T14:00:00.000Z"
+      },
+      {
+        "user_id": "user_erin",
+        "loan_date": "2025-01-25T10:00:00.000Z",
+        "return_date": "2025-02-08T13:20:00.000Z"
+      },
+      {
+        "user_id": "user_frank",
+        "loan_date": "2025-02-12T09:00:00.000Z",
+        "return_date": "2025-02-26T15:10:00.000Z"
+      }
+    ]
+  },
+  {
+    "isbn": "978-0345339683",
+    "title": "The Hobbit",
+    "author": "J.R.R. Tolkien",
+    "year": 1937,
+    "publisher": "George Allen & Unwin",
+    "available_stock": 3,
+    "loan_history": [
+      {
+        "user_id": "user_grace",
+        "loan_date": "2024-11-01T10:00:00.000Z",
+        "return_date": "2024-11-15T10:00:00.000Z"
+      },
+      {
+        "user_id": "user_heidi",
+        "loan_date": "2024-12-01T10:00:00.000Z",
+        "return_date": "2024-12-15T10:00:00.000Z"
+      },
+      {
+        "user_id": "user_ivan",
+        "loan_date": "2025-01-02T10:00:00.000Z",
+        "return_date": "2025-01-16T10:00:00.000Z"
+      },
+      {
+        "user_id": "user_judy",
+        "loan_date": "2025-02-01T10:00:00.000Z",
+        "return_date": null
+      },
+      {
+        "user_id": "user_alice",
+        "loan_date": "2025-02-10T10:00:00.000Z",
+        "return_date": null
+      }
+    ]
+  },
+  {
+    "isbn": "978-0134685991",
+    "title": "Clean Code",
+    "author": "Robert C. Martin",
+    "year": 2008,
+    "publisher": "Prentice Hall",
+    "available_stock": 3,
+    "loan_history": []
+  },
+  {
+    "isbn": "978-0135957059",
+    "title": "The Pragmatic Programmer",
+    "author": "Andrew Hunt",
+    "year": 1999,
+    "publisher": "Addison-Wesley",
+    "available_stock": 5,
+    "loan_history": []
+  },
+  {
+    "isbn": "978-0596517748",
+    "title": "JavaScript: The Good Parts",
+    "author": "Douglas Crockford",
+    "year": 2008,
+    "publisher": "O'Reilly Media",
+    "available_stock": 4,
+    "loan_history": []
+  },
+  {
+    "isbn": "978-0131103627",
+    "title": "The C Programming Language",
+    "author": "Brian W. Kernighan",
+    "year": 1988,
+    "publisher": "Prentice Hall",
+    "available_stock": 2,
+    "loan_history": []
+  },
+  {
+    "isbn": "978-0201633610",
+    "title": "Design Patterns",
+    "author": "Erich Gamma",
+    "year": 1994,
+    "publisher": "Addison-Wesley",
+    "available_stock": 3,
+    "loan_history": []
+  },
+  {
+    "isbn": "978-0743273565",
+    "title": "The Great Gatsby",
+    "author": "F. Scott Fitzgerald",
+    "year": 1925,
+    "publisher": "Charles Scribner's Sons",
+    "available_stock": 4,
+    "loan_history": []
+  },
+  {
+    "isbn": "978-1503280786",
+    "title": "Moby-Dick",
+    "author": "Herman Melville",
+    "year": 1851,
+    "publisher": "Harper & Brothers",
+    "available_stock": 2,
+    "loan_history": []
+  },
+  {
+    "isbn": "978-1503290563",
+    "title": "Pride and Prejudice",
+    "author": "Jane Austen",
+    "year": 1813,
+    "publisher": "T. Egerton",
+    "available_stock": 5,
+    "loan_history": []
+  }
+]
