@@ -1,0 +1,80 @@
+services:
+  api-gateway:
+    image: nginx:alpine
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    volumes:
+      - ./api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth-service
+      - library-service
+    networks:
+      - app-network
+
+  auth-service:
+    build:
+      context: ./auth-service
+    expose:
+      - "${AUTH_PORT:-5050}"
+    environment:
+      AUTH_HOST: 0.0.0.0
+      AUTH_PORT: "${AUTH_PORT:-5050}"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  library-service:
+    build:
+      context: ./library-service
+    expose:
+      - "${LIBRARY_PORT:-5051}"
+    environment:
+      LIBRARY_HOST: 0.0.0.0
+      LIBRARY_PORT: "${LIBRARY_PORT:-5051}"
+      MONGO_HOST: mongodb
+      MONGO_PORT: 27017
+      MONGO_DATABASE: "${MONGO_DATABASE:-library}"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
+
+  mongodb:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_DATABASE: "${MONGO_DATABASE:-library}"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
+volumes:
+  redis-data:
+  mongodb-data:
+
+networks:
+  app-network:
+    driver: bridge
