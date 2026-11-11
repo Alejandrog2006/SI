@@ -9,4 +9,4 @@ COPY app ./app
 
 EXPOSE 5051
 
-CMD ["hypercorn", "app:app", "--bind", "0.0.0.0:5051"]
+CMD ["hypercorn", "app:app", "--bind", "0.0.0.0:5051", "--reload"]
