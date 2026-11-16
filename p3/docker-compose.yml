@@ -10,6 +10,7 @@ services:
       - library-service
     networks:
       - app-network
+    restart: unless-stopped
 
   auth-service:
     build:
@@ -26,6 +27,7 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    restart: unless-stopped
 
   library-service:
     build:
@@ -43,6 +45,7 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -56,6 +59,7 @@ services:
       retries: 5
     networks:
       - app-network
+    restart: unless-stopped
 
   mongodb:
     image: mongo:7
@@ -70,6 +74,7 @@ services:
       retries: 10
     networks:
       - app-network
+    restart: unless-stopped
 
 volumes:
   redis-data:
