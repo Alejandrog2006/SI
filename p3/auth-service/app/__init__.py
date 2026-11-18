@@ -1,4 +1,5 @@
-from quart import Quart
+from quart import Quart, jsonify
+from werkzeug.exceptions import HTTPException
 from .redis_client import close_redis, init_redis
 from .routes import auth_bp
 
@@ -12,6 +13,14 @@ def create_app() -> Quart:
 
     # Registramos el Blueprint con los 4 endpoints (/auth/register, /auth/login, /auth/validate, /auth/logout)
     application.register_blueprint(auth_bp)
+
+    @application.errorhandler(HTTPException)
+    async def handle_http_exception(error: HTTPException):
+        """Convierte cualquier error HTTP automático (404, 405, etc.) de HTML a JSON."""
+        return jsonify({
+            "error": error.name,
+            "message": error.description,
+        }), error.code or 500
 
     @application.before_serving
     async def startup():

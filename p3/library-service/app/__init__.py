@@ -7,7 +7,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from quart import Quart
+from quart import Quart, jsonify
+from werkzeug.exceptions import HTTPException
 
 from .mongodb_client import close_mongodb, init_mongodb
 from .routes import library_bp
@@ -39,9 +40,9 @@ async def populate_database(collection) -> None:
     for book in books:
         document = _parse_datetime(book)
         await collection.update_one(
-            {"isbn": document["isbn"]},
-            {"$setOnInsert": document},
-            upsert=True,
+            {"isbn": document["isbn"]},      # 1. Busca si ya existe un libro con este ISBN
+            {"$setOnInsert": document},      # 2. Qué datos poner SOLO si se está creando de cero
+            upsert=True,                     # 3. "upsert" = Update + Insert
         )
 
 
@@ -49,6 +50,14 @@ def create_app() -> Quart:
     """Crea la aplicacion y registra rutas y ciclo de vida de MongoDB."""
     application = Quart(__name__)
     application.register_blueprint(library_bp)
+
+    @application.errorhandler(HTTPException)
+    async def handle_http_exception(error: HTTPException):
+        """Convierte cualquier error HTTP automatico (404, 405, etc.) de HTML a JSON."""
+        return jsonify({
+            "error": error.name,
+            "message": error.description,
+        }), error.code or 500
 
     @application.before_serving
     async def startup():
