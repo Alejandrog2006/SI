@@ -1,6 +1,6 @@
 # Práctica 3: Microservicios Avanzados y BBDD NoSQL
 
-Autores: Manuel Salvador Mayor (`tassburr-pixel`) y Alejandro González García (`Alejandrog2006`).
+Autores: Manuel Salvador Mayor y Alejandro González García.
 
 ---
 
